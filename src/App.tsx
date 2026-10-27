@@ -28,7 +28,7 @@ export default function App() {
 
   const ui = (
     <div ref={uiRef} className={'dex' + (gpu ? '' : ' no-gpu')} drawable="">
-      <Dex mode={mode} />
+      <Dex mode={mode} drawablePanels={drawable} />
       <footer className="credits">
         UNOFFICIAL FAN PROJECT · DATA{' '}
         <a href="https://pokeapi.co/" target="_blank" rel="noreferrer">

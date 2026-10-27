@@ -48,7 +48,9 @@ function Led({ color }: { color: number }) {
   return <span ref={useRegion<HTMLSpanElement>('led', 99, color)} className="led" />
 }
 
-export function Dex({ mode }: { mode: string }) {
+export function Dex({ mode, drawablePanels }: { mode: string; drawablePanels: boolean }) {
+  // HTML-in-Canvas: each screen is a nested drawable so it can float independently.
+  const panel = drawablePanels ? ({ drawable: '' } as const) : {}
   const [gen, setGen] = useState(1)
   const [entries, setEntries] = useState<DexEntry[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -209,7 +211,7 @@ export function Dex({ mode }: { mode: string }) {
 
       <main className="dex-body">
         <section className="col-left">
-          <div ref={mainScreenRef} className="screen main-screen">
+          <div ref={mainScreenRef} className="screen main-screen" {...panel}>
             <PanelHeader index="01" title="PROFILE" />
             <MicroText at="tr">
               SYS.DEX // GEN-{GENERATIONS[gen - 1]} // ID-{pad(detail?.id ?? 0)}
@@ -297,7 +299,7 @@ export function Dex({ mode }: { mode: string }) {
         </section>
 
         <section className="col-right">
-          <div ref={statScreenRef} className="screen stat-screen">
+          <div ref={statScreenRef} className="screen stat-screen" {...panel}>
             <MicroText at="bl">
               NORM {STAT_SCALE} · σ {sigma.toFixed(1)}
             </MicroText>
@@ -329,7 +331,7 @@ export function Dex({ mode }: { mode: string }) {
             ))}
           </div>
 
-          <div ref={listScreenRef} className="screen list-screen">
+          <div ref={listScreenRef} className="screen list-screen" {...panel}>
             <PanelHeader index="03" title="INDEX" />
             <MicroText at="bl">BUF {pad(selectedIndex + 1)}</MicroText>
             <MicroText at="br">

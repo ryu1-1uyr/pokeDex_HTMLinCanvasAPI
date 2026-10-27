@@ -80,6 +80,7 @@
 | 層 | 深さ | 実装 |
 | --- | --- | --- |
 | HUD（照準、引き出し線） | -40px（ガラスより手前） | CSS `--fui-depth-hud`、`--fui-px` `--fui-py` |
+| フォーカス中のパネル（HTML-in-Canvas のみ） | -28px（浮き上がり、判定も追従） | `Panels.ts` `LIFT` |
 | DOM テキスト | 0（ガラス面） | クリック判定と一致させるため動かさない |
 | データ可視化（レーダー、十字） | 7px | WGSL `DEPTH_DATA` |
 | 液晶の背面（ドットマトリクス） | 30px | WGSL `DEPTH_BACKPLANE` |

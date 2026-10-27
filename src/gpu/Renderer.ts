@@ -2,6 +2,7 @@ import { fx, MAX_REGIONS, noMorph, REGION_KIND } from '../fx/fxStore'
 import { Afterglow } from './Afterglow'
 import { ArtMorph } from './ArtMorph'
 import { Bloom } from './Bloom'
+import { Panels } from './Panels'
 import compositeWGSL from './shaders/composite.wgsl?raw'
 import materialWGSL from './shaders/material.wgsl?raw'
 import sceneWGSL from './shaders/scene.wgsl?raw'
@@ -111,6 +112,9 @@ export class Renderer {
   /** Flat-pass bind groups keyed by the afterglow target they read (it ping-pongs). */
   private flatBindGroups = new Map<GPUTexture, GPUBindGroup>()
   private afterglow: Afterglow
+  private panels: Panels
+  /** Set when the root's hit-testing geometry changed this frame. */
+  private rootMoved = false
   /** True while the previous frame's GPU work is still in flight. */
   private gpuBusy = false
   private lastRender = 0
@@ -181,6 +185,12 @@ export class Renderer {
     this.bgPipeline = pipeline('background', sceneModule, BG_FORMAT, 'fsBg')
     this.bloom = new Bloom(device)
     this.afterglow = new Afterglow(device)
+    this.panels = new Panels(device, canvas, {
+      copyElement: (el, tex) => this.copyElement(el, tex),
+      layoutRect,
+      planeHomography,
+      invert3,
+    })
 
     device.lost.then((info) => {
       if (info.reason === 'destroyed') return
@@ -225,6 +235,7 @@ export class Renderer {
     this.artMorph.destroy()
     this.bloom.destroy()
     this.afterglow.destroy()
+    this.panels.destroy()
     this.device.destroy()
   }
 
@@ -296,6 +307,7 @@ export class Renderer {
       this.domTex.destroy()
       this.domTex = this.createDomTexture(w, h)
       this.afterglow.resize(w, h)
+      this.panels.resize(w, h)
       this.hasDom = false
       this.canvas.requestPaint?.()
     }
@@ -304,24 +316,31 @@ export class Renderer {
   /** Wires the HTML-in-Canvas `paint` event to a DOM -> GPU texture copy. */
   private attachHtmlInCanvas(ui: HTMLElement) {
     const onPaint = () => {
-      const { width, height } = this.domTex
-      const queue = this.device.queue
-      try {
-        queue.drawElementImageToTexture!({ source: ui }, { texture: this.domTex, size: { width, height } })
-      } catch {
-        // Older Canary builds shipped `copyElementImageToTexture` with a different signature.
-        try {
-          queue.copyElementImageToTexture!({ source: ui }, { destination: { texture: this.domTex }, width, height })
-        } catch {
-          queue.copyElementImageToTexture!(ui, width, height, { texture: this.domTex })
-        }
-      }
+      this.copyElement(ui, this.domTex)
+      // Screens are nested drawables, excluded from the root snapshot and captured separately.
+      this.panels.paint(this.dpr)
       this.hasDom = true
       this.appliedTransform = ''
     }
     this.canvas.addEventListener('paint', onPaint)
     this.disposers.push(() => this.canvas.removeEventListener('paint', onPaint))
     this.canvas.requestPaint?.()
+  }
+
+  /** Copies an element's current snapshot into a texture of the same size. */
+  private copyElement(el: Element, texture: GPUTexture) {
+    const { width, height } = texture
+    const queue = this.device.queue
+    try {
+      queue.drawElementImageToTexture!({ source: el }, { texture, size: { width, height } })
+    } catch {
+      // Older Canary builds shipped `copyElementImageToTexture` with a different signature.
+      try {
+        queue.copyElementImageToTexture!({ source: el }, { destination: { texture }, width, height })
+      } catch {
+        queue.copyElementImageToTexture!(el, width, height, { texture })
+      }
+    }
   }
 
   private attachPointer() {
@@ -372,6 +391,7 @@ export class Renderer {
       this.appliedTransform = css
       if (this.drawable) {
         this.canvas.updateElementGeometry?.(this.ui, { canvasTransform: this.tiltMatrix })
+        this.rootMoved = true
       } else {
         this.ui.style.transformOrigin = '0 0'
         this.ui.style.transform = css
@@ -395,6 +415,11 @@ export class Renderer {
 
     const dev = this.writeRegions()
     this.updateTilt(dev, dt)
+    if (this.drawable) {
+      // Panels re-apply their geometry after the root so they stay above it in hit-test order.
+      this.panels.update(dt, this.tiltMatrix, [this.cssW, this.cssH], this.dpr, this.rootMoved)
+      this.rootMoved = false
+    }
 
     const front = planeHomography(this.tiltMatrix)
     const back = planeHomography(this.tiltMatrix.translate(0, 0, -THICKNESS))
@@ -412,7 +437,12 @@ export class Renderer {
 
     const encoder = this.device.createCommandEncoder()
     // HTML-in-Canvas only: phosphor persistence of the DOM texture.
-    if (this.drawable && this.hasDom) this.afterglow.encode(encoder, this.domTex, dt)
+    // HTML-in-Canvas only: compose root + lifted panels, then phosphor persistence.
+    const screenDom = this.drawable ? this.panels.output : this.domTex
+    if (this.drawable && this.hasDom) {
+      this.panels.encode(encoder, this.domTex)
+      this.afterglow.encode(encoder, screenDom, dt)
+    }
     const trail = this.afterglow.output
     let flatGroup = this.flatBindGroups.get(trail)
     if (!flatGroup) {
@@ -420,7 +450,7 @@ export class Renderer {
         { buffer: this.uniform },
         this.linear,
         this.repeat,
-        this.domTex.createView(),
+        screenDom.createView(),
         this.material.createView(),
         trail.createView(),
       ])
@@ -498,18 +528,22 @@ export class Renderer {
   private writeRegions(): Rect {
     const d = this.uniformData
     let dev: Rect = [0, 0, this.cssW, this.cssH]
+    const screens: HTMLElement[] = []
     let n = 0
     for (const r of fx.regions) {
       if (n >= MAX_REGIONS) break
       const rect = layoutRect(r.el)
       if (rect[2] === 0 || rect[3] === 0) continue
       if (r.kind === 'device') dev = rect
+      if (r.kind === 'screen') screens.push(r.el)
       const state = r.el.matches(':active') ? 2 : r.el.matches(':hover') ? 1 : 0
       d.set([...rect, REGION_KIND[r.kind], r.radius, r.color, state], REGION_OFFSET + n * 8)
       n++
     }
     d.fill(0, REGION_OFFSET + n * 8)
     d[7] = n
+    // Screens double as HTML-in-Canvas panels, in the same order the shader sees them.
+    if (this.drawable && this.panels.setElements(screens)) this.canvas.requestPaint?.()
     return dev
   }
 
