@@ -178,7 +178,9 @@ export function Dex({ mode }: { mode: string }) {
     listEl.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
   }, [selectedId])
 
-  const accentCss = detail ? toCss(TYPE_COLORS[detail.types[0]] ?? [0.9, 0.2, 0.2]) : undefined
+  const accent = detail ? (TYPE_COLORS[detail.types[0]] ?? [0.9, 0.2, 0.2]) : null
+  // The accent-colored button needs readable text on both light (electric) and dark (ghost) types.
+  const accentInk = accent && 0.2126 * accent[0] + 0.7152 * accent[1] + 0.0722 * accent[2] < 0.42 ? '#fff1ee' : '#1a1206'
   const total = detail?.stats.reduce((a, b) => a + b, 0) ?? 0
   const sigma = detail ? Math.sqrt(detail.stats.reduce((a, s) => a + (s - total / 6) ** 2, 0) / 6) : 0
   const selectedIndex = filtered.findIndex((e) => e.id === selectedId)
@@ -186,7 +188,11 @@ export function Dex({ mode }: { mode: string }) {
   const ready = detail != null && profileId === detail.id
 
   return (
-    <div ref={deviceRef} className="dex-inner" style={accentCss ? ({ '--accent': accentCss } as CSSProperties) : undefined}>
+    <div
+      ref={deviceRef}
+      className="dex-inner"
+      style={accent ? ({ '--accent': toCss(accent), '--accent-ink': accentInk } as CSSProperties) : undefined}
+    >
       <header className="dex-top">
         <div ref={lensRef} className="lens" />
         <div className="leds">

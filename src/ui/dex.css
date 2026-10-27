@@ -606,6 +606,10 @@ body,
   font-size: 13px;
 }
 
+.shell-btn.c1 {
+  color: var(--accent-ink, #1a1206);
+}
+
 .shell-btn.c2 {
   color: #2a1c00;
 }
