@@ -31,6 +31,8 @@ struct U {
 @group(0) @binding(2) var repSamp: sampler;
 @group(0) @binding(3) var domTex: texture_2d<f32>;
 @group(0) @binding(4) var matTex: texture_2d<f32>;
+/** HTML-in-Canvas only: phosphor-persisted DOM (Afterglow.ts). */
+@group(0) @binding(5) var trailTex: texture_2d<f32>;
 
 const PI = 3.14159265;
 const K_SCREEN = 1.0;
@@ -47,6 +49,9 @@ const INK = vec3f(0.62, 1.0, 0.92);
 const WARN = vec3f(1.0, 0.62, 0.18);
 /** HTML-in-Canvas only: how far bright LCD text is pushed past 1.0 so it blooms. */
 const TEXT_GLOW = 0.5;
+/** P1-style green phosphor tint and strength of the DOM afterglow. */
+const PHOSPHOR = vec3f(0.35, 1.0, 0.55);
+const AFTERGLOW = 0.9;
 /** Radius of the rounded outer rim of the shell. */
 const RIM = 18.0;
 /**
@@ -445,6 +450,12 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
       let lum = max(dom.r, max(dom.g, dom.b));
       let glow = 1.0 + smoothstep(0.55, 0.95, lum) * TEXT_GLOW * select(1.0, 0.0, inArt);
       col = mix(col, dom.rgb * glow, dom.a);
+
+      // Afterglow: wherever the persisted image is brighter than the current one,
+      // the difference lingers in a green phosphor tint (scrolling, decoding text).
+      let trail = textureSampleLevel(trailTex, samp, uvOf(p + barrel), 0.0);
+      let residual = max(trail.a - dom.a, 0.0) * max(trail.r, max(trail.g, trail.b));
+      col += PHOSPHOR * residual * AFTERGLOW * select(1.0, 0.0, inArt);
     }
 
     // Holographic foil over artwork cards

@@ -1,4 +1,5 @@
 import { fx, MAX_REGIONS, noMorph, REGION_KIND } from '../fx/fxStore'
+import { Afterglow } from './Afterglow'
 import { ArtMorph } from './ArtMorph'
 import { Bloom } from './Bloom'
 import compositeWGSL from './shaders/composite.wgsl?raw'
@@ -106,7 +107,10 @@ export class Renderer {
   private flatTex!: GPUTexture
   private bgTex!: GPUTexture
   /** Cached bind groups; reset whenever a texture they reference is recreated. */
-  private bindGroups: { flat?: GPUBindGroup; scene?: GPUBindGroup; bg?: GPUBindGroup } = {}
+  private bindGroups: { scene?: GPUBindGroup; bg?: GPUBindGroup } = {}
+  /** Flat-pass bind groups keyed by the afterglow target they read (it ping-pongs). */
+  private flatBindGroups = new Map<GPUTexture, GPUBindGroup>()
+  private afterglow: Afterglow
   /** True while the previous frame's GPU work is still in flight. */
   private gpuBusy = false
   private lastRender = 0
@@ -176,6 +180,7 @@ export class Renderer {
     this.scenePipeline = pipeline('scene', sceneModule, this.format)
     this.bgPipeline = pipeline('background', sceneModule, BG_FORMAT, 'fsBg')
     this.bloom = new Bloom(device)
+    this.afterglow = new Afterglow(device)
 
     device.lost.then((info) => {
       if (info.reason === 'destroyed') return
@@ -219,6 +224,7 @@ export class Renderer {
     if (!this.drawable) this.ui.style.transform = ''
     this.artMorph.destroy()
     this.bloom.destroy()
+    this.afterglow.destroy()
     this.device.destroy()
   }
 
@@ -285,9 +291,11 @@ export class Renderer {
     this.bgTex = target('background', Math.ceil(this.cssW * BG_SCALE), Math.ceil(this.cssH * BG_SCALE), BG_FORMAT)
     this.bloom.resize(this.flatTex)
     this.bindGroups = {}
+    this.flatBindGroups.clear()
     if (this.drawable) {
       this.domTex.destroy()
       this.domTex = this.createDomTexture(w, h)
+      this.afterglow.resize(w, h)
       this.hasDom = false
       this.canvas.requestPaint?.()
     }
@@ -402,14 +410,24 @@ export class Renderer {
     this.writeUniforms(t / 1000)
     this.writeSceneUniforms(t / 1000, dev, front, frontInv, backInv)
 
+    const encoder = this.device.createCommandEncoder()
+    // HTML-in-Canvas only: phosphor persistence of the DOM texture.
+    if (this.drawable && this.hasDom) this.afterglow.encode(encoder, this.domTex, dt)
+    const trail = this.afterglow.output
+    let flatGroup = this.flatBindGroups.get(trail)
+    if (!flatGroup) {
+      flatGroup = this.bindGroup(this.flatPipeline, [
+        { buffer: this.uniform },
+        this.linear,
+        this.repeat,
+        this.domTex.createView(),
+        this.material.createView(),
+        trail.createView(),
+      ])
+      this.flatBindGroups.set(trail, flatGroup)
+    }
+
     const bg = this.bindGroups
-    bg.flat ??= this.bindGroup(this.flatPipeline, [
-      { buffer: this.uniform },
-      this.linear,
-      this.repeat,
-      this.domTex.createView(),
-      this.material.createView(),
-    ])
     bg.bg ??= this.bindGroup(this.bgPipeline, [{ buffer: this.sceneUniform }])
     bg.scene ??= this.bindGroup(this.scenePipeline, [
       { buffer: this.sceneUniform },
@@ -419,14 +437,13 @@ export class Renderer {
       this.bloom.output.createView(),
     ])
 
-    const encoder = this.device.createCommandEncoder()
     // The flat device only covers the device body: scissor away the rest.
     const pad = 4
     const sx = Math.max(0, Math.floor((dev[0] - pad) * this.dpr))
     const sy = Math.max(0, Math.floor((dev[1] - pad) * this.dpr))
     const sw = Math.min(this.flatTex.width, Math.ceil((dev[0] + dev[2] + pad) * this.dpr)) - sx
     const sh = Math.min(this.flatTex.height, Math.ceil((dev[1] + dev[3] + pad) * this.dpr)) - sy
-    this.drawPass(encoder, this.flatTex.createView(), this.flatPipeline, bg.flat, (pass) => {
+    this.drawPass(encoder, this.flatTex.createView(), this.flatPipeline, flatGroup, (pass) => {
       if (sw > 0 && sh > 0) pass.setScissorRect(sx, sy, sw, sh)
     }, (pass) => this.drawMorph(pass))
     this.bloom.encode(encoder)
