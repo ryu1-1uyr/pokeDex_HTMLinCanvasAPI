@@ -14,6 +14,7 @@ import { playCry as playCryAudio } from '../fx/cry'
 import { fx } from '../fx/fxStore'
 import { useRegion } from '../fx/useRegion'
 import { Callouts, Decode, LiveReadout, MicroText, PanelHeader, PointerReadout } from './fui'
+import { Screen } from './Screen'
 import { clock, LOCK_TIME, wobble } from './fuiUtils'
 
 const GENERATIONS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX']
@@ -48,9 +49,11 @@ function Led({ color }: { color: number }) {
   return <span ref={useRegion<HTMLSpanElement>('led', 99, color)} className="led" />
 }
 
-export function Dex({ mode, drawablePanels }: { mode: string; drawablePanels: boolean }) {
-  // HTML-in-Canvas: each screen is a nested drawable so it can float independently.
-  const panel = drawablePanels ? ({ drawable: '' } as const) : {}
+/**
+ * `panelHost` is the canvas in HTML-in-Canvas mode: screen contents are portaled there
+ * so each can be captured and float on its own. Null renders everything in place.
+ */
+export function Dex({ mode, panelHost }: { mode: string; panelHost: HTMLElement | null }) {
   const [gen, setGen] = useState(1)
   const [entries, setEntries] = useState<DexEntry[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -211,7 +214,7 @@ export function Dex({ mode, drawablePanels }: { mode: string; drawablePanels: bo
 
       <main className="dex-body">
         <section className="col-left">
-          <div ref={mainScreenRef} className="screen main-screen" {...panel}>
+          <Screen id="main" className="screen main-screen" regionRef={mainScreenRef} host={panelHost} sizing="slot">
             <PanelHeader index="01" title="PROFILE" />
             <MicroText at="tr">
               SYS.DEX // GEN-{GENERATIONS[gen - 1]} // ID-{pad(detail?.id ?? 0)}
@@ -280,7 +283,7 @@ export function Dex({ mode, drawablePanels }: { mode: string; drawablePanels: bo
             ) : (
               <p className="loading">{error ?? 'LOADING…'}</p>
             )}
-          </div>
+          </Screen>
 
           <div className="controls">
             <ShellButton onClick={() => move(-1)} title="前へ (↑)">
@@ -299,7 +302,7 @@ export function Dex({ mode, drawablePanels }: { mode: string; drawablePanels: bo
         </section>
 
         <section className="col-right">
-          <div ref={statScreenRef} className="screen stat-screen" {...panel}>
+          <Screen id="stat" className="screen stat-screen" regionRef={statScreenRef} host={panelHost} sizing="content">
             <MicroText at="bl">
               NORM {STAT_SCALE} · σ {sigma.toFixed(1)}
             </MicroText>
@@ -321,7 +324,7 @@ export function Dex({ mode, drawablePanels }: { mode: string; drawablePanels: bo
                 )
               })}
             </div>
-          </div>
+          </Screen>
 
           <div className="gens">
             {GENERATIONS.map((g, i) => (
@@ -331,7 +334,7 @@ export function Dex({ mode, drawablePanels }: { mode: string; drawablePanels: bo
             ))}
           </div>
 
-          <div ref={listScreenRef} className="screen list-screen" {...panel}>
+          <Screen id="list" className="screen list-screen" regionRef={listScreenRef} host={panelHost} sizing="slot">
             <PanelHeader index="03" title="INDEX" />
             <MicroText at="bl">BUF {pad(selectedIndex + 1)}</MicroText>
             <MicroText at="br">
@@ -356,7 +359,7 @@ export function Dex({ mode, drawablePanels }: { mode: string; drawablePanels: bo
                 </li>
               ))}
             </ul>
-          </div>
+          </Screen>
         </section>
       </main>
     </div>

@@ -9,8 +9,14 @@ const FORMAT: GPUTextureFormat = 'rgba8unorm'
 const LIFT = 28
 const UNIFORM_FLOATS = 4 + MAX_PANELS * 20
 
-interface PanelState {
-  el: HTMLElement
+export interface PanelPair {
+  /** Empty placeholder in the UI layout; gives the panel its position (and shader region). */
+  slot: HTMLElement
+  /** Portaled content, an immediate child of the canvas; snapshotted and hit-tested. */
+  panel: HTMLElement
+}
+
+interface PanelState extends PanelPair {
   tex: GPUTexture | null
   lift: number
   geometry: string
@@ -86,11 +92,14 @@ export class Panels {
 
   /** Panels in the same order as the shader's screen regions. */
   /** Returns true when the set changed (the caller should request a paint). */
-  setElements(els: HTMLElement[]) {
-    const next = els.slice(0, MAX_PANELS)
-    if (next.length === this.panels.length && next.every((el, i) => el === this.panels[i].el)) return false
+  setElements(pairs: PanelPair[]) {
+    const next = pairs.slice(0, MAX_PANELS)
+    const same =
+      next.length === this.panels.length &&
+      next.every((p, i) => p.slot === this.panels[i].slot && p.panel === this.panels[i].panel)
+    if (same) return false
     this.panels.forEach((p) => p.tex?.destroy())
-    this.panels = next.map((el) => ({ el, tex: null, lift: 0, geometry: '' }))
+    this.panels = next.map((p) => ({ ...p, tex: null, lift: 0, geometry: '' }))
     this.bindGroup = null
     return true
   }
@@ -99,8 +108,8 @@ export class Panels {
   paint(dpr: number) {
     for (const p of this.panels) {
       // Prefer the browser's own snapshot size; otherwise assume CSS size x devicePixelRatio.
-      const native = this.canvas.getElementImageDefaultSize?.(p.el)
-      const [, , w, h] = this.deps.layoutRect(p.el)
+      const native = this.canvas.getElementImageDefaultSize?.(p.panel)
+      const [, , w, h] = this.deps.layoutRect(p.panel)
       const tw = Math.max(1, Math.round(native?.width ?? w * dpr))
       const th = Math.max(1, Math.round(native?.height ?? h * dpr))
       if (!p.tex || p.tex.width !== tw || p.tex.height !== th) {
@@ -108,7 +117,7 @@ export class Panels {
         p.tex = this.texture(tw, th, 'panel')
         this.bindGroup = null
       }
-      this.deps.copyElement(p.el, p.tex)
+      this.deps.copyElement(p.panel, p.tex)
       p.geometry = '' // a new snapshot needs its geometry re-applied
     }
   }
@@ -120,7 +129,7 @@ export class Panels {
   update(dt: number, tilt: DOMMatrix, res: [number, number], dpr: number, rootMoved: boolean) {
     const k = 1 - Math.exp(-dt * 10)
     for (const p of this.panels) {
-      const target = p.el.matches(':hover') || p.el.matches(':focus-within') ? 1 : 0
+      const target = p.panel.matches(':hover') || p.panel.matches(':focus-within') ? 1 : 0
       p.lift += (target - p.lift) * k
       if (Math.abs(target - p.lift) < 0.002) p.lift = target
     }
@@ -132,7 +141,7 @@ export class Panels {
     const flatToScreen = this.deps.planeHomography(tilt)
     const forceGeometry = rootMoved
     this.panels.forEach((p, i) => {
-      const rect = this.deps.layoutRect(p.el)
+      const rect = this.deps.layoutRect(p.slot)
       const lifted = tilt.translate(0, 0, LIFT * p.lift)
       const toPanel = mul3(this.deps.invert3(this.deps.planeHomography(lifted)), flatToScreen)
       const o = 4 + i * 20
@@ -145,7 +154,7 @@ export class Panels {
       const key = geometry.toString()
       if (forceGeometry || key !== p.geometry) {
         p.geometry = key
-        this.canvas.updateElementGeometry?.(p.el, { canvasTransform: geometry })
+        this.canvas.updateElementGeometry?.(p.panel, { canvasTransform: geometry })
       }
     })
     this.device.queue.writeBuffer(this.uniform, 0, d)

@@ -87,6 +87,11 @@ function applyH(h: Mat3, x: number, y: number) {
   return { x: (h[0] * x + h[1] * y + h[2]) / w, y: (h[3] * x + h[4] * y + h[5]) / w }
 }
 
+export interface RendererOptions {
+  /** HTML-in-Canvas: capturing the screen panels failed; render them in place instead. */
+  onPanelsFailed?: () => void
+}
+
 export class Renderer {
   private device: GPUDevice
   private canvas: HTMLCanvasElement
@@ -115,6 +120,7 @@ export class Renderer {
   private panels: Panels
   /** Set when the root's hit-testing geometry changed this frame. */
   private rootMoved = false
+  private options: RendererOptions
   private panelsDisabled = false
   /** True while the previous frame's GPU work is still in flight. */
   private gpuBusy = false
@@ -144,14 +150,21 @@ export class Renderer {
   private resizeObserver: ResizeObserver
   private disposers: (() => void)[] = []
 
-  static async create(canvas: HTMLCanvasElement, ui: HTMLElement, drawable: boolean) {
+  static async create(canvas: HTMLCanvasElement, ui: HTMLElement, drawable: boolean, options: RendererOptions = {}) {
     const adapter = await navigator.gpu?.requestAdapter()
     if (!adapter) throw new Error('WebGPU adapter not available')
     const device = await adapter.requestDevice()
-    return new Renderer(device, canvas, ui, drawable)
+    return new Renderer(device, canvas, ui, drawable, options)
   }
 
-  private constructor(device: GPUDevice, canvas: HTMLCanvasElement, ui: HTMLElement, drawable: boolean) {
+  private constructor(
+    device: GPUDevice,
+    canvas: HTMLCanvasElement,
+    ui: HTMLElement,
+    drawable: boolean,
+    options: RendererOptions,
+  ) {
+    this.options = options
     this.device = device
     this.canvas = canvas
     this.ui = ui
@@ -364,20 +377,20 @@ export class Renderer {
   }
 
   /** Turns the floating panels off and lets the root snapshot include the screens again. */
+  /** Turns the floating panels off; the UI re-renders the screens inside the root. */
   private disablePanels(error: unknown) {
     this.panelsDisabled = true
-    const screens = [...fx.regions].filter((r) => r.kind === 'screen').map((r) => r.el)
-    console.warn('[pokedex-gpu] Floating panels disabled: capturing a nested drawable failed.', {
+    const panels = [...this.canvas.querySelectorAll<HTMLElement>('[data-panel-for]')]
+    console.warn('[pokedex-gpu] Floating panels disabled: capturing a screen panel failed.', {
       error,
-      screens: screens.map((el) => {
+      panels: panels.map((el) => {
         const [, , w, h] = layoutRect(el)
-        return { className: el.className, cssSize: [w, h], defaultSize: this.canvas.getElementImageDefaultSize?.(el) }
+        return { id: el.dataset.panelFor, cssSize: [w, h], defaultSize: this.canvas.getElementImageDefaultSize?.(el) }
       }),
       dpr: this.dpr,
     })
-    // Removing the attribute puts the screens back into the root's snapshot.
-    screens.forEach((el) => el.removeAttribute('drawable'))
     this.panels.setElements([])
+    this.options.onPanelsFailed?.()
     this.canvas.requestPaint?.()
   }
 
@@ -416,8 +429,11 @@ export class Renderer {
     const parallax = `${px},${py}`
     if (parallax !== this.appliedParallax) {
       this.appliedParallax = parallax
-      this.ui.style.setProperty('--fui-px', px)
-      this.ui.style.setProperty('--fui-py', py)
+      // On the canvas too: HTML-in-Canvas panels are canvas children outside the UI root.
+      for (const el of [this.ui, this.canvas]) {
+        el.style.setProperty('--fui-px', px)
+        el.style.setProperty('--fui-py', py)
+      }
     }
     const persp = new DOMMatrix()
     persp.m34 = -1 / PERSPECTIVE
@@ -566,23 +582,48 @@ export class Renderer {
   private writeRegions(): Rect {
     const d = this.uniformData
     let dev: Rect = [0, 0, this.cssW, this.cssH]
-    const screens: HTMLElement[] = []
+    const slots: HTMLElement[] = []
     let n = 0
     for (const r of fx.regions) {
       if (n >= MAX_REGIONS) break
-      const rect = layoutRect(r.el)
+      const rect = this.regionRect(r.el)
       if (rect[2] === 0 || rect[3] === 0) continue
       if (r.kind === 'device') dev = rect
-      if (r.kind === 'screen') screens.push(r.el)
+      if (r.kind === 'screen') slots.push(r.el)
       const state = r.el.matches(':active') ? 2 : r.el.matches(':hover') ? 1 : 0
       d.set([...rect, REGION_KIND[r.kind], r.radius, r.color, state], REGION_OFFSET + n * 8)
       n++
     }
     d.fill(0, REGION_OFFSET + n * 8)
     d[7] = n
-    // Screens double as HTML-in-Canvas panels, in the same order the shader sees them.
-    if (this.drawable && !this.panelsDisabled && this.panels.setElements(screens)) this.canvas.requestPaint?.()
+    // HTML-in-Canvas: pair each screen slot with its portaled panel (ui/Screen.tsx).
+    if (this.drawable && !this.panelsDisabled) {
+      const pairs = slots.flatMap((slot) => {
+        const panel = this.panelFor(slot)
+        return panel ? [{ slot, panel }] : []
+      })
+      if (this.panels.setElements(pairs)) this.canvas.requestPaint?.()
+    }
     return dev
+  }
+
+  private panelFor(slot: HTMLElement) {
+    const id = slot.dataset.panelId
+    return id ? this.canvas.querySelector<HTMLElement>(`[data-panel-for="${id}"]`) : null
+  }
+
+  /**
+   * Layout rect in device space. Elements inside a portaled panel are laid out where the
+   * panel sits among the canvas children, so they are moved into the panel's slot.
+   */
+  private regionRect(el: HTMLElement): Rect {
+    const rect = layoutRect(el)
+    const panel = this.drawable ? el.closest<HTMLElement>('[data-panel-for]') : null
+    const slot = panel && this.ui.querySelector<HTMLElement>(`[data-panel-id="${panel.dataset.panelFor}"]`)
+    if (!panel || !slot) return rect
+    const p = layoutRect(panel)
+    const s = layoutRect(slot)
+    return [rect[0] - p[0] + s[0], rect[1] - p[1] + s[1], rect[2], rect[3]]
   }
 
   private writeUniforms(time: number) {

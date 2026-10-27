@@ -33,6 +33,12 @@ body,
   color: var(--shell-ink);
 }
 
+/* HTML-in-Canvas: portaled screen contents are canvas children outside .dex,
+   so restate what they would otherwise inherit from it. */
+.dex-panel {
+  font-family: 'DotGothic16', system-ui, sans-serif;
+}
+
 .stage + .dex {
   position: fixed;
   inset: 0;
