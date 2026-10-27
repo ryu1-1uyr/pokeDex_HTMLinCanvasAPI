@@ -66,9 +66,12 @@ Territory Studio の Peter Eszenyi は、どれだけ美しい UI でも物語�
 
 ## 参考
 
+資料ごとの要点と原則との対応は [references.md](references.md) にまとめている。
+
 - [Pragmatic futurism and screen graphics – interview with Mark Coleran (Pushing Pixels)](https://www.pushing-pixels.org/?p=18414)
 - [Faking good design in film – Wireframe podcast episode 12 (Adobe)](https://xd.adobe.com/ideas/perspectives/wireframe-podcast/faking-good-design-in-film-episode-12)
 - [Mark Coleran interview (Gizmodo, Pushing Pixels archive)](https://pushing-pixels.org/coleran/interviews/gizmodo/index.html)
+- [The craft of screen graphics and movie user interfaces – interview with David Sheldon-Hicks of Territory Studio (Pushing Pixels)](https://www.pushing-pixels.org/?p=9769)
 - [The art and craft of screen graphics – interview with Peter Eszenyi of Territory Studio (Pushing Pixels)](https://www.pushing-pixels.org/?p=13856)
 - [The craft of screen graphics and movie user interfaces – conversation with Jayse Hansen (Pushing Pixels)](https://www.pushing-pixels.org/?p=7447)
 - [Design of "The Avengers" – interface designs and HUDs (HUDS+GUIS)](https://www.hudsandguis.com/2013/05/15/the-avengers/)

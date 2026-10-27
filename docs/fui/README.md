@@ -9,6 +9,7 @@
 | [grammar.md](grammar.md) | 文法。色・線・書体・余白・モーション・レイヤーのルールとトークン |
 | [patterns.md](patterns.md) | パターン集。レシピと実装場所、未実装の候補 |
 | [checklist.md](checklist.md) | レビュー用チェックリストと採点履歴 |
+| [references.md](references.md) | 参考文献。資料ごとの要点と、根拠にしている原則 |
 
 ## 進め方
 
