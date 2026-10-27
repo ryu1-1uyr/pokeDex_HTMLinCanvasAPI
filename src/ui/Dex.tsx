@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import {
   fetchDetail,
   fetchGeneration,
@@ -49,11 +49,28 @@ function Led({ color }: { color: number }) {
   return <span ref={useRegion<HTMLSpanElement>('led', 99, color)} className="led" />
 }
 
+/** Phone layout breakpoint (same as dex.css and the renderer). */
+const COMPACT_QUERY = '(max-width: 860px)'
+
+function useMediaQuery(query: string) {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mq = window.matchMedia(query)
+      mq.addEventListener('change', onChange)
+      return () => mq.removeEventListener('change', onChange)
+    },
+    () => window.matchMedia(query).matches,
+  )
+}
+
 /**
  * `panelHost` is the canvas in HTML-in-Canvas mode: screen contents are portaled there
  * so each can be captured and float on its own. Null renders everything in place.
  */
 export function Dex({ mode, panelHost }: { mode: string; panelHost: HTMLElement | null }) {
+  // On phones the main screen's height comes from its content, not the grid, so an empty
+  // HTML-in-Canvas slot would collapse; let the portaled content size it instead.
+  const compact = useMediaQuery(COMPACT_QUERY)
   const [gen, setGen] = useState(1)
   const [entries, setEntries] = useState<DexEntry[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -222,7 +239,13 @@ export function Dex({ mode, panelHost }: { mode: string; panelHost: HTMLElement 
 
       <main className="dex-body">
         <section className="col-left">
-          <Screen id="main" className="screen main-screen" regionRef={mainScreenRef} host={panelHost} sizing="slot">
+          <Screen
+            id="main"
+            className="screen main-screen"
+            regionRef={mainScreenRef}
+            host={panelHost}
+            sizing={compact ? 'content' : 'slot'}
+          >
             <PanelHeader index="01" title="PROFILE" />
             <MicroText at="tr">
               SYS.DEX // GEN-{GENERATIONS[gen - 1]} // ID-{pad(detail?.id ?? 0)}
