@@ -17,7 +17,7 @@ struct U {
   regionCount: f32,
   accent: vec4f,
   stats0: vec4f,
-  stats1: vec4f,            // spd, spe, voice level (cry loudness), _
+  stats1: vec4f,            // spd, spe, voice level (cry loudness), seconds since renderer start
   accent2: vec4f,
   rot: array<vec4f, 3>,     // rows of the device tilt rotation (object -> view)
   regions: array<Region, 32>,
@@ -44,6 +44,10 @@ const RIM = 18.0;
 /** How far the LCD content sits below the glass, and the (exaggerated) depth of its inner wall. */
 const SCREEN_DEPTH = 10.0;
 const WALL_DEPTH = 40.0;
+/** Boot sequence: screen k powers on at BOOT_START + k * BOOT_STAGGER (keep in sync with dex.css). */
+const BOOT_START = 0.35;
+const BOOT_STAGGER = 0.25;
+const BOOT_LEN = 0.55;
 
 @vertex
 fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -350,10 +354,13 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
   // Find the screen (and inner regions) under this pixel.
   var screenIdx = -1;
   var screenD = 1e9;
+  var screenOrder = 0.0;
+  var screensSeen = 0.0;
   for (var i = 0u; i < n; i++) {
     if (u.regions[i].params.x == K_SCREEN) {
       let d = regionSd(i, p);
-      if (d < screenD) { screenD = d; screenIdx = i32(i); }
+      if (d < screenD) { screenD = d; screenIdx = i32(i); screenOrder = screensSeen; }
+      screensSeen += 1.0;
     }
   }
 
@@ -437,6 +444,18 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     // Glass reflections: the room in front of the device + pointer glint.
     let glint = exp(-length(p - u.mouse) * 0.02) * 0.12;
     col += glassReflection(p, u32(screenIdx)) + vec3f(glint);
+
+    // Boot: CRT-style power on. A bright scanline appears at the center and opens up.
+    let bt = (u.stats1.w - BOOT_START - screenOrder * BOOT_STAGGER) / BOOT_LEN;
+    if (bt < 1.0) {
+      let open = smoothstep(0.0, 1.0, bt);
+      let dy = abs(p.y - sc.y);
+      let halfOpen = mix(1.0, sr.w * 0.5, open * open);
+      let lit = step(dy, halfOpen) * step(0.0, bt);
+      let line = exp(-max(dy - halfOpen, 0.0) / 2.0) * exp(-abs(dy - halfOpen) / 3.0) * (1.0 - open);
+      col = col * lit * (1.0 + (1.0 - open) * 1.5) + vec3f(0.55, 1.0, 0.9) * line * 2.0 * step(0.0, bt);
+      col = max(col, vec3f(0.008, 0.012, 0.014));
+    }
   } else if (devD > 1.0) {
     return vec4f(0.0);
   } else {

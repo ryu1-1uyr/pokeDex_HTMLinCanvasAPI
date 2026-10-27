@@ -117,6 +117,7 @@ export class Renderer {
   private dpr = 1
   private raf = 0
   private lastT = 0
+  private startedAt = performance.now()
   private stats = [0, 0, 0, 0, 0, 0]
   private mouse = { x: 0, y: 0 }
   private light = { x: 0, y: 0 }
@@ -480,7 +481,7 @@ export class Renderer {
     d.set([this.light.x, this.light.y, this.hasDom ? 1 : 0], 4)
     d.set([...fx.accent, 1], 8)
     d.set(this.stats.slice(0, 4), 12)
-    d.set([this.stats[4], this.stats[5], fx.voice, 0], 16)
+    d.set([this.stats[4], this.stats[5], fx.voice, (performance.now() - this.startedAt) / 1000], 16)
     d.set([...fx.accent2, 1], 20)
     d.set(this.rotRows, 24)
     this.device.queue.writeBuffer(this.uniform, 0, d)

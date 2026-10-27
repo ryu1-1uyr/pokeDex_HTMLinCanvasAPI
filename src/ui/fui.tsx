@@ -44,6 +44,30 @@ export function PointerReadout() {
   )
 }
 
+const GLYPHS = 'アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789ABCDEFXYZ#%&*+=<>/'
+
+/**
+ * Text that "decodes": a revealed prefix followed by a short run of random glyphs,
+ * sweeping left to right whenever `text` changes.
+ */
+export function Decode({ text, duration = 450 }: { text: string; duration?: number }) {
+  const [shown, setShown] = useState(text)
+  useEffect(() => {
+    const start = performance.now()
+    let raf = 0
+    const tick = () => {
+      const p = Math.min(1, (performance.now() - start) / duration)
+      const n = Math.floor(p * text.length)
+      const noise = Array.from({ length: Math.min(6, text.length - n) }, () => GLYPHS[(Math.random() * GLYPHS.length) | 0])
+      setShown(text.slice(0, n) + noise.join(''))
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    tick()
+    return () => cancelAnimationFrame(raf)
+  }, [text, duration])
+  return <>{shown}</>
+}
+
 // ---------------------------------------------------------------- callouts
 
 interface Anchors {

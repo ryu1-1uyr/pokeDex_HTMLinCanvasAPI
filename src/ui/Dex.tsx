@@ -13,12 +13,14 @@ import {
 import { playCry as playCryAudio } from '../fx/cry'
 import { fx } from '../fx/fxStore'
 import { useRegion } from '../fx/useRegion'
-import { Callouts, LiveReadout, MicroText, PointerReadout } from './fui'
+import { Callouts, Decode, LiveReadout, MicroText, PointerReadout } from './fui'
 import { clock, wobble } from './fuiUtils'
 
 const GENERATIONS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX']
 const STAT_LABELS = ['HP', 'こうげき', 'ぼうぎょ', 'とくこう', 'とくぼう', 'すばやさ']
 const STAT_SCALE = 180
+/** The main screen finishes its boot animation at this point (see dex.css --boot). */
+const MAIN_SCREEN_ON_MS = 1000
 
 const pad = (n: number) => String(n).padStart(4, '0')
 
@@ -71,6 +73,7 @@ export function Dex({ mode }: { mode: string }) {
   )
   // The <img> is hidden while the particle morph is running.
   const [art, setArt] = useState<{ src: string; visible: boolean } | null>(null)
+  const mountedAt = useRef(performance.now())
   const radarRef = useRegion<HTMLDivElement>('radar', 0)
   const listEl = useRef<HTMLUListElement | null>(null)
 
@@ -113,9 +116,14 @@ export function Dex({ mode }: { mode: string }) {
         fx.accent = c1
         fx.accent2 = c2
         fx.stats = d.stats.map((s) => Math.min(1, s / STAT_SCALE))
-        const morph = fx.morph(d.artwork, () => holoEl.current)
-        morph.started.then(() => !cancelled && setArt({ src: d.artwork, visible: false }))
-        morph.done.then(() => !cancelled && setArt({ src: d.artwork, visible: true }))
+        // Don't let the first morph's particles float over a screen that is still off.
+        const bootWait = Math.max(0, MAIN_SCREEN_ON_MS - (performance.now() - mountedAt.current))
+        setTimeout(() => {
+          if (cancelled) return
+          const morph = fx.morph(d.artwork, () => holoEl.current)
+          morph.started.then(() => !cancelled && setArt({ src: d.artwork, visible: false }))
+          morph.done.then(() => !cancelled && setArt({ src: d.artwork, visible: true }))
+        }, bootWait)
       })
       .catch((e) => !cancelled && setError(String(e)))
     return () => {
@@ -220,10 +228,14 @@ export function Dex({ mode }: { mode: string }) {
                 </div>
                 <div className="profile">
                   <h2>
-                    {detail.jaName}
-                    <span className="en">{detail.name}</span>
+                    <Decode text={detail.jaName} duration={350} />
+                    <span className="en">
+                      <Decode text={detail.name} duration={400} />
+                    </span>
                   </h2>
-                  <p className="genus">{detail.genus}</p>
+                  <p className="genus">
+                    <Decode text={detail.genus} />
+                  </p>
                   <div className="types">
                     {detail.types.map((t) => (
                       <span key={t} className="type" style={{ '--type': toCss(TYPE_COLORS[t]) } as CSSProperties}>
@@ -233,11 +245,17 @@ export function Dex({ mode }: { mode: string }) {
                   </div>
                   <dl className="metrics">
                     <dt>たかさ</dt>
-                    <dd>{detail.height.toFixed(1)} m</dd>
+                    <dd>
+                      <Decode text={`${detail.height.toFixed(1)} m`} duration={300} />
+                    </dd>
                     <dt>おもさ</dt>
-                    <dd>{detail.weight.toFixed(1)} kg</dd>
+                    <dd>
+                      <Decode text={`${detail.weight.toFixed(1)} kg`} duration={300} />
+                    </dd>
                   </dl>
-                  <p className="flavor">{detail.flavor}</p>
+                  <p className="flavor">
+                    <Decode text={detail.flavor} duration={700} />
+                  </p>
                 </div>
               </>
             ) : (
