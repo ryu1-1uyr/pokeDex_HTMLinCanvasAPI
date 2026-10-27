@@ -668,14 +668,40 @@ body,
 
 /* ---------------------------------------------------------------- narrow screens */
 
+/* Phones: the device fills the screen edge to edge and scrolls; no backdrop
+   (the renderer skips it at the same breakpoint, see COMPACT_QUERY). */
 @media (max-width: 860px) {
   .dex {
+    display: block;
     overflow: auto;
-    padding: 12px;
+    padding: 0;
+  }
+  .dex {
+    overflow-x: hidden;
   }
   .dex-inner {
+    width: 100%;
     height: auto;
-    padding: 16px;
+    min-height: 100%;
+    margin: 0;
+    padding: 16px 14px 20px;
+    /* Without an explicit track, the grid column grows to the widest child's min-content. */
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dex-top {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .brand {
+    font-size: 22px;
+  }
+  /* No pointer to report on touch screens. */
+  .hud {
+    display: none;
+  }
+  .credits {
+    position: static;
+    padding: 10px 14px 16px;
   }
   .dex-body {
     grid-template-columns: minmax(0, 1fr);

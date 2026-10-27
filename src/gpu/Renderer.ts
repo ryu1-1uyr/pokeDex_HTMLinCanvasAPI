@@ -18,6 +18,10 @@ const BG_FORMAT: GPUTextureFormat = 'rgba8unorm'
 const BG_SCALE = 0.5
 /** Frame cap; avoids saturating the GPU on 120Hz displays. */
 const MIN_FRAME_MS = 1000 / 60 - 1.5
+/** Phone layout (same breakpoint as dex.css): full-bleed device, no backdrop, no tilt. */
+const COMPACT_QUERY = '(max-width: 860px)'
+/** Degrees of phone tilt (from where it was first held) that move the light across the screen. */
+const ORIENTATION_RANGE = 25
 
 /** Perspective distance (CSS px) and max tilt (deg) of the device. */
 const PERSPECTIVE = 1800
@@ -120,6 +124,10 @@ export class Renderer {
   private panels: Panels
   /** Set when the root's hit-testing geometry changed this frame. */
   private rootMoved = false
+  private compact = false
+  /** Phone tilt relative to the first reading, -1..1 per axis; null until a reading arrives. */
+  private orientation: { x: number; y: number } | null = null
+  private orientationBase: { beta: number; gamma: number } | null = null
   private options: RendererOptions
   private panelsDisabled = false
   /** True while the previous frame's GPU work is still in flight. */
@@ -294,6 +302,7 @@ export class Renderer {
 
   private resize() {
     const rect = this.canvas.getBoundingClientRect()
+    this.compact = window.matchMedia(COMPACT_QUERY).matches
     this.dpr = Math.min(window.devicePixelRatio || 1, 2)
     this.cssW = Math.max(1, rect.width)
     this.cssH = Math.max(1, rect.height)
@@ -403,6 +412,51 @@ export class Renderer {
     this.disposers.push(() => window.removeEventListener('pointermove', onMove))
     this.mouse = { x: innerWidth * 0.5, y: innerHeight * 0.5 }
     this.light = { ...this.mouse }
+    this.attachOrientation()
+  }
+
+  /** Phones: tilting the device moves the light source. */
+  private attachOrientation() {
+    const clamp = (v: number) => Math.max(-1, Math.min(1, v))
+    const onOrientation = (e: DeviceOrientationEvent) => {
+      if (e.beta == null || e.gamma == null) return
+      // Relative to how the phone was held at first, so any holding angle works.
+      this.orientationBase ??= { beta: e.beta, gamma: e.gamma }
+      const gx = (e.gamma - this.orientationBase.gamma) / ORIENTATION_RANGE
+      const gy = (e.beta - this.orientationBase.beta) / ORIENTATION_RANGE
+      // Device axes are fixed to the hardware; rotate them into the current screen orientation.
+      const a = ((screen.orientation?.angle ?? 0) * Math.PI) / 180
+      this.orientation = {
+        x: clamp(gx * Math.cos(a) + gy * Math.sin(a)),
+        y: clamp(-gx * Math.sin(a) + gy * Math.cos(a)),
+      }
+    }
+    window.addEventListener('deviceorientation', onOrientation)
+    this.disposers.push(() => window.removeEventListener('deviceorientation', onOrientation))
+
+    // iOS Safari only delivers orientation after a permission prompt triggered by a user gesture.
+    const DOE = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined
+    if (typeof DOE?.requestPermission === 'function') {
+      const ask = () => {
+        DOE.requestPermission!().catch(() => {})
+      }
+      window.addEventListener('pointerdown', ask, { once: true })
+      this.disposers.push(() => window.removeEventListener('pointerdown', ask))
+    }
+    const onOrientationChange = () => (this.orientationBase = null)
+    screen.orientation?.addEventListener('change', onOrientationChange)
+    this.disposers.push(() => screen.orientation?.removeEventListener('change', onOrientationChange))
+  }
+
+  /** Where the light should be: the pointer, or on phones the device tilt. */
+  private lightTarget() {
+    if (this.compact && this.orientation) {
+      return {
+        x: this.cssW * (0.5 + this.orientation.x * 0.7),
+        y: this.cssH * (0.35 + this.orientation.y * 0.7),
+      }
+    }
+    return this.mouse
   }
 
   // ------------------------------------------------------------ tilt
@@ -412,8 +466,9 @@ export class Renderer {
     const cx = x + w / 2
     const cy = y + h / 2
     const clamp = (v: number) => Math.max(-1, Math.min(1, v))
-    const nx = clamp((this.mouse.x - cx) / (w / 2))
-    const ny = clamp((this.mouse.y - cy) / (h / 2))
+    // Phones keep the device flat: there's no pointer to tilt toward and the DOM must stay put.
+    const nx = this.compact ? 0 : clamp((this.mouse.x - cx) / (w / 2))
+    const ny = this.compact ? 0 : clamp((this.mouse.y - cy) / (h / 2))
     // The side nearest the pointer sinks away from the viewer.
     const k = 1 - Math.exp(-dt * 5)
     this.tilt.x += (-ny * TILT_X - this.tilt.x) * k
@@ -481,7 +536,8 @@ export class Renderer {
     const backInv = invert3(back)
 
     // Light follows the pointer, expressed in the flat device space.
-    const flatMouse = applyH(frontInv, this.mouse.x, this.mouse.y)
+    const target = this.lightTarget()
+    const flatMouse = applyH(frontInv, target.x, target.y)
     const kl = 1 - Math.exp(-dt * 8)
     this.light.x += (flatMouse.x - this.light.x) * kl
     this.light.y += (flatMouse.y - this.light.y) * kl
@@ -531,7 +587,12 @@ export class Renderer {
       if (sw > 0 && sh > 0) pass.setScissorRect(sx, sy, sw, sh)
     }, (pass) => this.drawMorph(pass))
     this.bloom.encode(encoder)
-    this.drawPass(encoder, this.bgTex.createView(), this.bgPipeline, bg.bg)
+    if (this.compact) {
+      // No backdrop on phones: just keep the target black.
+      encoder.beginRenderPass({ colorAttachments: [{ view: this.bgTex.createView(), loadOp: 'clear', storeOp: 'store' }] }).end()
+    } else {
+      this.drawPass(encoder, this.bgTex.createView(), this.bgPipeline, bg.bg)
+    }
     this.drawPass(encoder, this.context.getCurrentTexture().createView(), this.scenePipeline, bg.scene)
     this.device.queue.submit([encoder.finish()])
 

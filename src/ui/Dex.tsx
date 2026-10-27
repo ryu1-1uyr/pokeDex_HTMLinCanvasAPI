@@ -179,8 +179,16 @@ export function Dex({ mode, panelHost }: { mode: string; panelHost: HTMLElement 
     return () => window.removeEventListener('keydown', onKey)
   })
 
+  // Keep the selected row visible by scrolling only the list; scrollIntoView would also
+  // scroll the page, which on phones jumps the whole device on first load.
   useEffect(() => {
-    listEl.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+    const list = listEl.current
+    const item = list?.querySelector<HTMLElement>('[aria-selected="true"]')
+    if (!list || !item) return
+    const l = list.getBoundingClientRect()
+    const r = item.getBoundingClientRect()
+    if (r.top < l.top) list.scrollTop -= l.top - r.top
+    else if (r.bottom > l.bottom) list.scrollTop += r.bottom - l.bottom
   }, [selectedId])
 
   const accent = detail ? (TYPE_COLORS[detail.types[0]] ?? [0.9, 0.2, 0.2]) : null
