@@ -29,6 +29,13 @@ export default function App() {
   const ui = (
     <div ref={uiRef} className={'dex' + (gpu ? '' : ' no-gpu')} drawable="">
       <Dex mode={mode} />
+      <footer className="credits">
+        UNOFFICIAL FAN PROJECT · DATA{' '}
+        <a href="https://pokeapi.co/" target="_blank" rel="noreferrer">
+          PokéAPI
+        </a>{' '}
+        · Pokémon and Pokémon character names are trademarks of Nintendo. Images and cries © The Pokémon Company.
+      </footer>
     </div>
   )
 

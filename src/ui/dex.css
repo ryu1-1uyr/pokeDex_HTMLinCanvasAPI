@@ -610,6 +610,23 @@ body,
   color: #2a1c00;
 }
 
+/* ---------------------------------------------------------------- credits */
+
+.credits {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  text-align: center;
+  font: 10px var(--fui-mono);
+  letter-spacing: 0.06em;
+  color: rgb(255 255 255 / 0.55);
+}
+
+.credits a {
+  color: inherit;
+}
+
 /* ---------------------------------------------------------------- no WebGPU fallback */
 
 .no-gpu {

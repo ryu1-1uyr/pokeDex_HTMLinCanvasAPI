@@ -1,5 +1,7 @@
 const BASE = 'https://pokeapi.co/api/v2'
 const JA_NAME_CACHE_KEY = 'dex:ja-names:v1'
+/** Persistent response cache. Bump the version to invalidate. */
+const RESPONSE_CACHE = 'pokeapi-v1'
 
 export interface DexEntry {
   id: number
@@ -35,10 +37,30 @@ const idFromUrl = (url: string) => Number(url.split('/').filter(Boolean).pop())
 
 const responseCache = new Map<string, Promise<unknown>>()
 
+/**
+ * PokeAPI's fair use policy asks clients to cache every resource locally.
+ * Responses are static, so they are kept in Cache Storage across reloads and each
+ * resource is requested at most once per browser. Falls back to a plain fetch
+ * where Cache Storage is unavailable (insecure context, private mode).
+ */
+async function fetchCached(url: string): Promise<Response> {
+  let cache: Cache | null = null
+  try {
+    cache = await caches.open(RESPONSE_CACHE)
+    const hit = await cache.match(url)
+    if (hit) return hit
+  } catch {
+    cache = null
+  }
+  const res = await fetch(url)
+  if (res.ok && cache) cache.put(url, res.clone()).catch(() => {})
+  return res
+}
+
 function getJson<T>(path: string): Promise<T> {
   let p = responseCache.get(path)
   if (!p) {
-    p = fetch(BASE + path).then((r) => {
+    p = fetchCached(BASE + path).then((r) => {
       if (!r.ok) throw new Error(`PokeAPI ${r.status}: ${path}`)
       return r.json()
     })
@@ -129,7 +151,8 @@ function rememberJaName(id: number, name: string) {
 export const getJaName = (id: number): string | undefined => jaNames[id]
 
 /** Fetches missing Japanese names with limited concurrency, reporting progress. */
-export async function fillJaNames(ids: number[], onUpdate: () => void, signal: AbortSignal, concurrency = 4) {
+// Low concurrency on purpose: PokeAPI asks clients to keep request frequency down.
+export async function fillJaNames(ids: number[], onUpdate: () => void, signal: AbortSignal, concurrency = 2) {
   const queue = ids.filter((id) => !jaNames[id])
   const worker = async () => {
     while (queue.length && !signal.aborted) {

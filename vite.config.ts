@@ -4,4 +4,7 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // Relative asset paths so the build works under a GitHub Pages project subpath
+  // (https://<user>.github.io/<repo>/) without hard-coding the repository name.
+  base: './',
 })
