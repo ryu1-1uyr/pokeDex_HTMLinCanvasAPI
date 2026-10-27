@@ -209,6 +209,23 @@ fn lightAt(p: vec2f, n: vec3f, roughness: f32) -> Lit {
   return o;
 }
 
+// Front fill: a large, dim softbox just above the viewer. A perspective view vector
+// turns its reflection into a broad band fading from the top of the device downward,
+// and an exaggerated micro normal makes the molded texture, flakes and scratches read
+// inside that band.
+fn frontFill(p: vec2f, baseN: vec3f, micro: vec3f, roughness: f32, mat: vec4f) -> vec3f {
+  let fineN = rotN(normalize(baseN + micro * 3.0));
+  let dc = gDevice.xy + gDevice.zw * 0.5;
+  let viewP = normalize(vec3f((dc - p) / 1600.0, 1.0));
+  let r = reflect(-viewP, fineN);
+  let box = normalize(vec3f(0.0, -0.3, 1.0));
+  let d = max(dot(r, box), 0.0);
+  let band = pow(d, 30.0) * 0.28 * (1.0 - roughness * 0.6);
+  // Scratches and flakes glint where the band falls
+  let glints = (mat.b * 0.6 + mat.g * 0.5) * pow(d, 10.0) * 0.35;
+  return vec3f(1.0, 0.97, 0.94) * (band + glints);
+}
+
 // ---------------------------------------------------------------- radar chart
 
 fn statAt(i: i32) -> f32 {
@@ -399,14 +416,14 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     return vec4f(0.0);
   } else {
     // ============ Plastic shell ============
-    var nrm = shellNormal(p);
+    let baseN = shellNormal(p);
     // Micro normal from the baked orange-peel height
     let e = 1.0;
     let mx = sampleMat(p + vec2f(e, 0.0)).r - sampleMat(p - vec2f(e, 0.0)).r;
     let my = sampleMat(p + vec2f(0.0, e)).r - sampleMat(p - vec2f(0.0, e)).r;
-    nrm = normalize(nrm + vec3f(-mx, -my, 0.0) * 0.9);
+    let micro = vec3f(-mx, -my, 0.0);
     // Light in view space so reflections slide across the body as it tilts.
-    nrm = rotN(nrm);
+    let nrm = rotN(normalize(baseN + micro * 0.9));
 
     var albedo = vec3f(0.78, 0.06, 0.09) * (0.92 + 0.12 * mat.a);
     var roughness = 0.35 + mat.a * 0.25 - mat.b * 0.2;
@@ -472,6 +489,7 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     col = mix(dielectric, metallic, metal) + emissive;
     // Flake sparkle catching the pointer light
     col += vec3f(1.0, 0.9, 0.85) * mat.g * pow(lit.spec, 0.5) * 0.6;
+    col += frontFill(p, baseN, micro, roughness, mat) * (1.0 - metal * 0.5);
     col = aces(col);
 
     // DOM content drawn on the shell (labels, button captions)
