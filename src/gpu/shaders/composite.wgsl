@@ -1,4 +1,6 @@
-// Final composite: procedural Pokédex shell + DOM texture + fluid + region materials.
+// Flat device pass: procedural Pokédex shell + DOM texture + region materials.
+// Renders the untilted device into an offscreen texture (premultiplied alpha);
+// scene.wgsl warps it into perspective over the background.
 // All positions are CSS pixels (fragment position / dpr), origin top-left.
 
 struct Region {
@@ -15,8 +17,9 @@ struct U {
   regionCount: f32,
   accent: vec4f,
   stats0: vec4f,
-  stats1: vec4f,
+  stats1: vec4f,            // spd, spe, voice level (cry loudness), _
   accent2: vec4f,
+  rot: array<vec4f, 3>,     // rows of the device tilt rotation (object -> view)
   regions: array<Region, 32>,
 };
 
@@ -24,9 +27,7 @@ struct U {
 @group(0) @binding(1) var samp: sampler;
 @group(0) @binding(2) var repSamp: sampler;
 @group(0) @binding(3) var domTex: texture_2d<f32>;
-@group(0) @binding(4) var velTex: texture_2d<f32>;
-@group(0) @binding(5) var dyeTex: texture_2d<f32>;
-@group(0) @binding(6) var matTex: texture_2d<f32>;
+@group(0) @binding(4) var matTex: texture_2d<f32>;
 
 const PI = 3.14159265;
 const K_SCREEN = 1.0;
@@ -35,7 +36,14 @@ const K_HOLO = 3.0;
 const K_BUTTON = 4.0;
 const K_LENS = 5.0;
 const K_LED = 6.0;
+const K_DEVICE = 7.0;
+const DEVICE_RADIUS = 28.0;
 const BEZEL = 12.0;
+/** Radius of the rounded outer rim of the shell. */
+const RIM = 18.0;
+/** How far the LCD content sits below the glass, and the (exaggerated) depth of its inner wall. */
+const SCREEN_DEPTH = 10.0;
+const WALL_DEPTH = 40.0;
 
 @vertex
 fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -48,6 +56,21 @@ fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
 fn sdRoundBox(p: vec2f, b: vec2f, r: f32) -> f32 {
   let q = abs(p) - b + r;
   return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - r;
+}
+
+fn rotN(n: vec3f) -> vec3f {
+  return normalize(vec3f(dot(u.rot[0].xyz, n), dot(u.rot[1].xyz, n), dot(u.rot[2].xyz, n)));
+}
+
+// View direction expressed in the device's own (untilted) space: R^T * (0, 0, 1).
+fn viewObj() -> vec3f {
+  return vec3f(u.rot[0].z, u.rot[1].z, u.rot[2].z);
+}
+
+// Screen-space shift of a point lying `depth` px below the device surface.
+fn parallax(depth: f32) -> vec2f {
+  let v = viewObj();
+  return -v.xy / max(v.z, 0.2) * depth;
 }
 
 fn regionSd(i: u32, p: vec2f) -> f32 {
@@ -67,8 +90,20 @@ fn palette(i: f32) -> vec3f {
   }
 }
 
-fn hash12(p: vec2f) -> f32 {
-  return fract(sin(dot(p, vec2f(12.9898, 78.233))) * 43758.5453);
+// Rect of the device body (region kind 7); falls back to the full viewport.
+var<private> gDevice: vec4f;
+
+fn findDevice() -> vec4f {
+  let n = u32(u.regionCount);
+  for (var i = 0u; i < n; i++) {
+    if (u.regions[i].params.x == K_DEVICE) { return u.regions[i].rect; }
+  }
+  return vec4f(0.0, 0.0, u.res);
+}
+
+fn deviceSd(p: vec2f) -> f32 {
+  let half = gDevice.zw * 0.5;
+  return sdRoundBox(p - (gDevice.xy + half), half, DEVICE_RADIUS);
 }
 
 fn aces(c: vec3f) -> vec3f {
@@ -108,10 +143,9 @@ fn thinFilm(thicknessNm: f32, cosI: f32) -> vec3f {
 
 // Height in px-ish units. Screens are sunken behind a bezel, buttons raised, lenses domed.
 fn shellHeight(p: vec2f) -> f32 {
-  // Outer rounded edge of the whole device.
-  let half = u.res * 0.5;
-  let dEdge = sdRoundBox(p - half, half - 4.0, 28.0);
-  var h = smoothstep(4.0, -22.0, dEdge) * 6.0;
+  // Outer rim: quarter-circle profile so the silhouette reads as rounded thick plastic.
+  let x = clamp(-deviceSd(p) / RIM, 0.0, 1.0);
+  var h = sqrt(1.0 - (1.0 - x) * (1.0 - x)) * RIM * 0.6;
 
   let n = u32(u.regionCount);
   for (var i = 0u; i < n; i++) {
@@ -266,9 +300,8 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
   let uv = uvOf(p);
   let mat = sampleMat(p);
   let n = u32(u.regionCount);
-
-  let vel = textureSampleLevel(velTex, samp, uv, 0.0).xy;
-  let dye = textureSampleLevel(dyeTex, samp, uv, 0.0).rgb;
+  gDevice = findDevice();
+  let devD = deviceSd(p);
 
   // Find the screen (and inner regions) under this pixel.
   var screenIdx = -1;
@@ -281,6 +314,7 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
   }
 
   var col: vec3f;
+  var alpha = 1.0;
 
   if (screenIdx >= 0 && screenD < 0.0) {
     // ============ LCD glass ============
@@ -288,10 +322,9 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let sc = sr.xy + sr.zw * 0.5;
     let local = (p - sc) / (sr.zw * 0.5);
 
-    // Barrel distortion + fluid refraction. Kept small so hit-testing stays aligned.
-    let barrel = local * dot(local, local) * 0.006 * sr.zw * 0.5;
-    let refr = vel * 0.05;
-    let dp = barrel + refr;
+    // Barrel distortion + depth parallax (the panel sits below the glass).
+    // Both are kept small so hit-testing stays aligned.
+    let dp = local * dot(local, local) * 0.006 * sr.zw * 0.5 + parallax(SCREEN_DEPTH);
 
     // LCD backplane: deep teal with a dot-matrix pattern.
     let cell = fract(p / 3.0) - 0.5;
@@ -308,13 +341,10 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
       }
     }
 
-    // Ink in the liquid crystal: fluid dye glows inside the screen.
-    bg += dye * 0.8 + dye * dye * 0.5;
-
     col = aces(bg);
     if (u.hasDom > 0.5) {
-      // Chromatic aberration grows with refraction strength.
-      let ca = (length(refr) * 0.6 + 0.4) * normalize(local + 1e-4) * 0.6;
+      // Lens-like chromatic aberration toward the screen edges.
+      let ca = normalize(local + 1e-4) * 0.24;
       let dr = textureSampleLevel(domTex, samp, uvOf(p + dp + ca), 0.0);
       let dg = textureSampleLevel(domTex, samp, uvOf(p + dp), 0.0);
       let db = textureSampleLevel(domTex, samp, uvOf(p + dp - ca), 0.0);
@@ -353,10 +383,20 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     col *= 1.0 - 0.45 * pow(length(local) * 0.75, 3.0);
     col *= mix(0.35, 1.0, smoothstep(0.0, -18.0, screenD));
 
+    // Inner bezel wall: when tilted, the wall on the far side of the recess becomes
+    // visible and occludes the panel edge.
+    let wallD = regionSd(u32(screenIdx), p + parallax(WALL_DEPTH));
+    let wall = smoothstep(-1.0, 1.0, wallD);
+    let wallShade = vec3f(0.035, 0.035, 0.045) + vec3f(0.03) * smoothstep(0.0, 10.0, wallD);
+    col = mix(col, wallShade, wall);
+
     // Glass reflections: diagonal sheen + pointer glint.
-    let sheen = smoothstep(0.25, 0.0, abs(local.x + local.y * 0.6 + 0.35)) * 0.06;
+    let sheenOff = viewObj().xy * 4.0;
+    let sheen = smoothstep(0.25, 0.0, abs(local.x + sheenOff.x + (local.y + sheenOff.y) * 0.6 + 0.35)) * 0.08;
     let glint = exp(-length(p - u.mouse) * 0.02) * 0.12;
     col += vec3f(sheen + glint);
+  } else if (devD > 1.0) {
+    return vec4f(0.0);
   } else {
     // ============ Plastic shell ============
     var nrm = shellNormal(p);
@@ -365,6 +405,8 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let mx = sampleMat(p + vec2f(e, 0.0)).r - sampleMat(p - vec2f(e, 0.0)).r;
     let my = sampleMat(p + vec2f(0.0, e)).r - sampleMat(p - vec2f(0.0, e)).r;
     nrm = normalize(nrm + vec3f(-mx, -my, 0.0) * 0.9);
+    // Light in view space so reflections slide across the body as it tilts.
+    nrm = rotN(nrm);
 
     var albedo = vec3f(0.78, 0.06, 0.09) * (0.92 + 0.12 * mat.a);
     var roughness = 0.35 + mat.a * 0.25 - mat.b * 0.2;
@@ -392,7 +434,12 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
         if (d < 0.0) {
           // Glass dome: dark core, bright inner rim, refracted light pool.
           var glass = select(palette(u.regions[i].params.z), vec3f(0.1, 0.55, 1.0), kind == K_LENS);
-          let pulse = 0.75 + 0.25 * sin(u.time * select(5.0, 2.0, kind == K_LENS) + f32(i));
+          var pulse = 0.75 + 0.25 * sin(u.time * select(5.0, 2.0, kind == K_LENS) + f32(i));
+          if (kind == K_LENS) {
+            // Lights up with the cry's loudness
+            pulse = mix(pulse, 1.0, u.stats1.z) + u.stats1.z * 3.5;
+            emissive += vec3f(0.6, 0.85, 1.0) * u.stats1.z * u.stats1.z * smoothstep(0.7, 0.0, x) * 2.0;
+          }
           let pool = exp(-length(p - c + (u.mouse - c) * 0.08 + vec2f(rad * 0.25)) / rad * 2.2);
           albedo = glass * 0.25;
           emissive += glass * (pool * 1.6 + smoothstep(0.6, 1.0, x) * 0.6) * pulse;
@@ -410,14 +457,21 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
       }
     }
 
+    // Blue light spilling from the lens onto the surrounding shell while it glows.
+    for (var i = 0u; i < n; i++) {
+      if (u.regions[i].params.x != K_LENS) { continue; }
+      let d = regionSd(i, p);
+      if (d > 0.0) {
+        emissive += vec3f(0.15, 0.5, 1.0) * exp(-d / 22.0) * u.stats1.z * 1.4;
+      }
+    }
+
     let lit = lightAt(p, nrm, roughness);
     let dielectric = albedo * lit.diffuse + vec3f(lit.spec) * (1.0 - roughness) + lit.refl * lit.fresnel * (1.0 - roughness);
     let metallic = albedo * (lit.refl * 0.8 + vec3f(lit.spec)) ;
     col = mix(dielectric, metallic, metal) + emissive;
     // Flake sparkle catching the pointer light
     col += vec3f(1.0, 0.9, 0.85) * mat.g * pow(lit.spec, 0.5) * 0.6;
-    // Fluid: faint wet sheen on the shell
-    col += dye * 0.08;
     col = aces(col);
 
     // DOM content drawn on the shell (labels, button captions)
@@ -426,9 +480,9 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
       // Slight emboss: captions look printed onto the plastic.
       col = mix(col, dom.rgb * (0.85 + 0.3 * lit.diffuse), dom.a);
     }
+    // Anti-aliased silhouette
+    alpha = 1.0 - smoothstep(-0.75, 0.75, devD);
   }
 
-  // Grain to kill banding
-  col += (hash12(frag.xy + fract(u.time) * 100.0) - 0.5) / 255.0 * 2.0;
-  return vec4f(clamp(col, vec3f(0.0), vec3f(1.0)), 1.0);
+  return vec4f(clamp(col, vec3f(0.0), vec3f(1.0)) * alpha, alpha);
 }

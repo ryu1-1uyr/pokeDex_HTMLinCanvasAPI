@@ -14,7 +14,7 @@ export default function App() {
     if (!hasWebGPU) return
     let renderer: Renderer | undefined
     let disposed = false
-    Renderer.create(canvasRef.current!, drawable ? uiRef.current : null)
+    Renderer.create(canvasRef.current!, uiRef.current!, drawable)
       .then((r) => (disposed ? r.dispose() : (renderer = r)))
       .catch((e) => setGpuError(String(e)))
     return () => {

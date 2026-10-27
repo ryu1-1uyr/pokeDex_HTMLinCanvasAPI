@@ -29,6 +29,8 @@ body,
   height: 100vh;
   box-sizing: border-box;
   overflow: hidden;
+  display: flex;
+  padding: 24px;
   font-family: 'DotGothic16', system-ui, sans-serif;
   color: var(--shell-ink);
 }
@@ -38,8 +40,12 @@ body,
   inset: 0;
 }
 
+/* The device body: fixed size, centered (margin: auto avoids clipping when it overflows). */
 .dex-inner {
-  height: 100%;
+  width: min(1010px, 100%);
+  height: min(800px, 100%);
+  margin: auto;
+  border-radius: 28px;
   box-sizing: border-box;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -365,6 +371,10 @@ body,
 /* ---------------------------------------------------------------- no WebGPU fallback */
 
 .no-gpu {
+  background: #120607;
+}
+
+.no-gpu .dex-inner {
   background: #b5121b;
 }
 
@@ -392,6 +402,7 @@ body,
 @media (max-width: 860px) {
   .dex {
     overflow: auto;
+    padding: 12px;
   }
   .dex-inner {
     height: auto;

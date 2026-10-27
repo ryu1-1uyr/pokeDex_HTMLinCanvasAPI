@@ -10,6 +10,7 @@ import {
   type DexEntry,
   type PokemonDetail,
 } from '../api/pokeapi'
+import { playCry as playCryAudio } from '../fx/cry'
 import { fx } from '../fx/fxStore'
 import { useRegion } from '../fx/useRegion'
 
@@ -52,13 +53,13 @@ export function Dex({ mode }: { mode: string }) {
   const [error, setError] = useState<string | null>(null)
   const [nameTick, setNameTick] = useState(0)
 
+  const deviceRef = useRegion<HTMLDivElement>('device', 28)
   const lensRef = useRegion<HTMLDivElement>('lens', 99)
   const mainScreenRef = useRegion<HTMLDivElement>('screen', 14)
   const statScreenRef = useRegion<HTMLDivElement>('screen', 14)
   const listScreenRef = useRegion<HTMLDivElement>('screen', 14)
-  const holoRegion = useRegion<HTMLDivElement>('holo', 12)
+  const holoRef = useRegion<HTMLDivElement>('holo', 12)
   const radarRef = useRegion<HTMLDivElement>('radar', 0)
-  const holoEl = useRef<HTMLDivElement | null>(null)
   const listEl = useRef<HTMLUListElement | null>(null)
 
   // Generation list + lazy Japanese names
@@ -100,8 +101,6 @@ export function Dex({ mode }: { mode: string }) {
         fx.accent = c1
         fx.accent2 = c2
         fx.stats = d.stats.map((s) => Math.min(1, s / STAT_SCALE))
-        const r = holoEl.current?.getBoundingClientRect()
-        if (r) fx.burst(r.x + r.width / 2, r.y + r.height / 2, [c1, c2])
       })
       .catch((e) => !cancelled && setError(String(e)))
     return () => {
@@ -131,7 +130,7 @@ export function Dex({ mode }: { mode: string }) {
   }
 
   const playCry = () => {
-    if (detail?.cry) new Audio(detail.cry).play().catch(() => {})
+    if (detail?.cry) playCryAudio(detail.cry)
   }
 
   useEffect(() => {
@@ -154,7 +153,7 @@ export function Dex({ mode }: { mode: string }) {
   const total = detail?.stats.reduce((a, b) => a + b, 0) ?? 0
 
   return (
-    <div className="dex-inner" style={accentCss ? ({ '--accent': accentCss } as CSSProperties) : undefined}>
+    <div ref={deviceRef} className="dex-inner" style={accentCss ? ({ '--accent': accentCss } as CSSProperties) : undefined}>
       <header className="dex-top">
         <div ref={lensRef} className="lens" />
         <div className="leds">
@@ -173,13 +172,7 @@ export function Dex({ mode }: { mode: string }) {
           <div ref={mainScreenRef} className="screen main-screen">
             {detail ? (
               <>
-                <div
-                  ref={(el) => {
-                    holoEl.current = el
-                    holoRegion(el)
-                  }}
-                  className="holo-card"
-                >
+                <div ref={holoRef} className="holo-card">
                   <span className="dex-no">No.{pad(detail.id)}</span>
                   <img src={detail.artwork} alt={detail.jaName} crossOrigin="anonymous" />
                 </div>
