@@ -21,7 +21,19 @@ export interface Region {
   color: number
 }
 
+export interface MorphHandle {
+  /** Resolves once the new artwork is on the GPU and particles have taken over. */
+  started: Promise<void>
+  /** Resolves when the real image should be shown again. */
+  done: Promise<void>
+}
+
 export const MAX_REGIONS = 32
+
+/** Morph used when no renderer is attached: show the image right away. */
+export function noMorph(_url: string, _card: () => HTMLElement | null): MorphHandle {
+  return { started: Promise.resolve(), done: Promise.resolve() }
+}
 
 export const fx = {
   regions: new Set<Region>(),
@@ -31,4 +43,10 @@ export const fx = {
   accent2: [0.2, 0.5, 0.9] as [number, number, number],
   /** Loudness envelope (0..1) of the cry currently playing. */
   voice: 0,
+
+  /**
+   * Starts the artwork particle transition. `card` returns the holo card element
+   * the artwork sits in. Replaced by the renderer; without WebGPU it resolves at once.
+   */
+  morph: noMorph,
 }

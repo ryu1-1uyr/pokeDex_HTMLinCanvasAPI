@@ -164,6 +164,15 @@ body,
   filter: drop-shadow(0 8px 14px rgb(0 0 0 / 0.5));
 }
 
+.holo-card img.art-hidden {
+  opacity: 0;
+}
+
+.holo-card img.art-shown {
+  opacity: 1;
+  transition: opacity 0.3s ease-out;
+}
+
 .dex-no {
   position: absolute;
   top: 10px;

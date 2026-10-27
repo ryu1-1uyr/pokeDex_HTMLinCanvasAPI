@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   fetchDetail,
   fetchGeneration,
@@ -58,7 +58,17 @@ export function Dex({ mode }: { mode: string }) {
   const mainScreenRef = useRegion<HTMLDivElement>('screen', 14)
   const statScreenRef = useRegion<HTMLDivElement>('screen', 14)
   const listScreenRef = useRegion<HTMLDivElement>('screen', 14)
-  const holoRef = useRegion<HTMLDivElement>('holo', 12)
+  const holoRegion = useRegion<HTMLDivElement>('holo', 12)
+  const holoEl = useRef<HTMLDivElement | null>(null)
+  const holoRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      holoEl.current = el
+      holoRegion(el)
+    },
+    [holoRegion],
+  )
+  // The <img> is hidden while the particle morph is running.
+  const [art, setArt] = useState<{ src: string; visible: boolean } | null>(null)
   const radarRef = useRegion<HTMLDivElement>('radar', 0)
   const listEl = useRef<HTMLUListElement | null>(null)
 
@@ -101,6 +111,9 @@ export function Dex({ mode }: { mode: string }) {
         fx.accent = c1
         fx.accent2 = c2
         fx.stats = d.stats.map((s) => Math.min(1, s / STAT_SCALE))
+        const morph = fx.morph(d.artwork, () => holoEl.current)
+        morph.started.then(() => !cancelled && setArt({ src: d.artwork, visible: false }))
+        morph.done.then(() => !cancelled && setArt({ src: d.artwork, visible: true }))
       })
       .catch((e) => !cancelled && setError(String(e)))
     return () => {
@@ -174,7 +187,14 @@ export function Dex({ mode }: { mode: string }) {
               <>
                 <div ref={holoRef} className="holo-card">
                   <span className="dex-no">No.{pad(detail.id)}</span>
-                  <img src={detail.artwork} alt={detail.jaName} crossOrigin="anonymous" />
+                  {art && (
+                    <img
+                      src={art.src}
+                      alt={detail.jaName}
+                      crossOrigin="anonymous"
+                      className={art.visible ? 'art-shown' : 'art-hidden'}
+                    />
+                  )}
                 </div>
                 <div className="profile">
                   <h2>

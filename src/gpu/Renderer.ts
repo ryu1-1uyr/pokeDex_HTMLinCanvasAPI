@@ -1,4 +1,5 @@
-import { fx, MAX_REGIONS, REGION_KIND } from '../fx/fxStore'
+import { fx, MAX_REGIONS, noMorph, REGION_KIND } from '../fx/fxStore'
+import { ArtMorph } from './ArtMorph'
 import compositeWGSL from './shaders/composite.wgsl?raw'
 import materialWGSL from './shaders/material.wgsl?raw'
 import sceneWGSL from './shaders/scene.wgsl?raw'
@@ -96,6 +97,8 @@ export class Renderer {
   private domTex: GPUTexture
   private flatTex!: GPUTexture
   private hasDom = false
+  private artMorph: ArtMorph
+  private morphCard: () => HTMLElement | null = () => null
 
   private cssW = 1
   private cssH = 1
@@ -156,6 +159,16 @@ export class Renderer {
     this.scenePipeline = pipeline('scene', sceneWGSL, this.format)
 
     this.material = this.bakeMaterial()
+    this.artMorph = new ArtMorph(device, FLAT_FORMAT)
+    const morph: typeof fx.morph = (url, card) => {
+      this.morphCard = card
+      return this.artMorph.start(url)
+    }
+    fx.morph = morph
+    // StrictMode can dispose an older renderer after a newer one attached; only detach our own.
+    this.disposers.push(() => {
+      if (fx.morph === morph) fx.morph = noMorph
+    })
     this.domTex = this.createDomTexture(1, 1)
 
     this.resizeObserver = new ResizeObserver(() => this.resize())
@@ -172,6 +185,7 @@ export class Renderer {
     this.resizeObserver.disconnect()
     this.disposers.forEach((d) => d())
     if (!this.drawable) this.ui.style.transform = ''
+    this.artMorph.destroy()
     this.device.destroy()
   }
 
@@ -341,7 +355,7 @@ export class Renderer {
       { binding: 2, resource: this.repeat },
       { binding: 3, resource: this.domTex.createView() },
       { binding: 4, resource: this.material.createView() },
-    ])
+    ], (pass) => this.drawMorph(pass))
     this.drawPass(encoder, this.context.getCurrentTexture().createView(), this.scenePipeline, [
       { binding: 0, resource: { buffer: this.sceneUniform } },
       { binding: 1, resource: this.linear },
@@ -355,6 +369,7 @@ export class Renderer {
     view: GPUTextureView,
     pipeline: GPURenderPipeline,
     entries: GPUBindGroupEntry[],
+    after?: (pass: GPURenderPassEncoder) => void,
   ) {
     const pass = encoder.beginRenderPass({
       colorAttachments: [{ view, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }],
@@ -362,7 +377,18 @@ export class Renderer {
     pass.setPipeline(pipeline)
     pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries }))
     pass.draw(3)
+    after?.(pass)
     pass.end()
+  }
+
+  /** Artwork particles, drawn into the flat device so they tilt with it. */
+  private drawMorph(pass: GPURenderPassEncoder) {
+    const card = this.morphCard()
+    if (!card || !this.artMorph.active) return
+    // Matches the CSS: the artwork is a square 92% of the card width, centered.
+    const [x, y, w, h] = layoutRect(card)
+    const s = w * 0.92
+    this.artMorph.draw(pass, [x + (w - s) / 2, y + (h - s) / 2, s, s], [this.cssW, this.cssH], this.dpr, fx.accent)
   }
 
   /** Writes region rects into the flat-pass uniforms and returns the device rect. */
