@@ -13,6 +13,8 @@ import {
 import { playCry as playCryAudio } from '../fx/cry'
 import { fx } from '../fx/fxStore'
 import { useRegion } from '../fx/useRegion'
+import { Callouts, LiveReadout, MicroText, PointerReadout } from './fui'
+import { clock, wobble } from './fuiUtils'
 
 const GENERATIONS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX']
 const STAT_LABELS = ['HP', 'こうげき', 'ぼうぎょ', 'とくこう', 'とくぼう', 'すばやさ']
@@ -164,6 +166,8 @@ export function Dex({ mode }: { mode: string }) {
 
   const accentCss = detail ? toCss(TYPE_COLORS[detail.types[0]] ?? [0.9, 0.2, 0.2]) : undefined
   const total = detail?.stats.reduce((a, b) => a + b, 0) ?? 0
+  const sigma = detail ? Math.sqrt(detail.stats.reduce((a, s) => a + (s - total / 6) ** 2, 0) / 6) : 0
+  const selectedIndex = filtered.findIndex((e) => e.id === selectedId)
 
   return (
     <div ref={deviceRef} className="dex-inner" style={accentCss ? ({ '--accent': accentCss } as CSSProperties) : undefined}>
@@ -177,12 +181,20 @@ export function Dex({ mode }: { mode: string }) {
         <h1 className="brand">
           POKéDEX <small>GPU</small>
         </h1>
+        <PointerReadout />
         <span className="mode-chip">{mode}</span>
       </header>
 
       <main className="dex-body">
         <section className="col-left">
           <div ref={mainScreenRef} className="screen main-screen">
+            <MicroText at="tr">
+              SYS.DEX // GEN-{GENERATIONS[gen - 1]} // ID-{pad(detail?.id ?? 0)}
+            </MicroText>
+            <LiveReadout
+              at="bl"
+              render={(t) => `SCAN ${(98.6 + wobble(t, 0, 1.2)).toFixed(1)}% · ${clock(t)}`}
+            />
             {detail ? (
               <>
                 <div ref={holoRef} className="holo-card">
@@ -193,6 +205,16 @@ export function Dex({ mode }: { mode: string }) {
                       alt={detail.jaName}
                       crossOrigin="anonymous"
                       className={art.visible ? 'art-shown' : 'art-hidden'}
+                    />
+                  )}
+                  {art?.visible && (
+                    <Callouts
+                      src={art.src}
+                      labels={{
+                        apex: `APEX // H ${detail.height.toFixed(1)}M`,
+                        core: `CORE // W ${detail.weight.toFixed(1)}KG`,
+                        edge: `EDGE // ${detail.types.join('+').toUpperCase()}`,
+                      }}
                     />
                   )}
                 </div>
@@ -241,6 +263,10 @@ export function Dex({ mode }: { mode: string }) {
 
         <section className="col-right">
           <div ref={statScreenRef} className="screen stat-screen">
+            <MicroText at="bl">
+              NORM {STAT_SCALE} · σ {sigma.toFixed(1)}
+            </MicroText>
+            <LiveReadout at="br" render={(t) => `SIG ${(-42 + wobble(t, 3, 2.5)).toFixed(1)}dB`} />
             <div className="stat-head">
               <span>BASE STATS</span>
               <span>合計 {total}</span>
@@ -271,6 +297,10 @@ export function Dex({ mode }: { mode: string }) {
           </div>
 
           <div ref={listScreenRef} className="screen list-screen">
+            <MicroText at="bl">BUF {pad(selectedIndex + 1)}</MicroText>
+            <MicroText at="br">
+              IDX {filtered.length}/{entries.length}
+            </MicroText>
             <input
               className="search"
               placeholder="なまえ / No. でけんさく"

@@ -133,6 +133,7 @@ body,
 /* ---------------------------------------------------------------- screens */
 
 .screen {
+  position: relative;
   border-radius: 14px;
   color: var(--screen-ink);
   min-height: 0;
@@ -245,7 +246,7 @@ body,
 /* stats */
 
 .stat-screen {
-  padding: 14px 18px 8px;
+  padding: 14px 18px 20px;
 }
 
 .stat-head {
@@ -285,7 +286,7 @@ body,
 .list-screen {
   display: flex;
   flex-direction: column;
-  padding: 14px;
+  padding: 14px 14px 24px;
   gap: 10px;
 }
 
@@ -332,6 +333,86 @@ body,
 
 .list .no {
   color: var(--screen-dim);
+}
+
+/* ---------------------------------------------------------------- FUI layers */
+
+.micro,
+.hud,
+.callout-text {
+  font-family: 'Share Tech Mono', ui-monospace, monospace;
+  letter-spacing: 0.08em;
+}
+
+.micro {
+  position: absolute;
+  font-size: 10px;
+  color: var(--screen-dim);
+  opacity: 0.85;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.micro.tl { top: 6px; left: 12px; }
+.micro.tr { top: 6px; right: 12px; }
+.micro.bl { bottom: 5px; left: 12px; }
+.micro.br { bottom: 5px; right: 12px; }
+
+.hud {
+  font-size: 11px;
+  color: var(--shell-ink);
+  opacity: 0.75;
+}
+
+.callouts {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.callout-line {
+  fill: none;
+  stroke: var(--screen-ink);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: callout-draw 0.45s cubic-bezier(0.6, 0, 0.2, 1) var(--d, 0s) forwards;
+  opacity: 0.8;
+}
+
+.callout-ring {
+  fill: none;
+  stroke: var(--screen-ink);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.callout-dot {
+  fill: var(--screen-ink);
+}
+
+.callout-text {
+  font-size: 15px;
+  fill: var(--screen-ink);
+  opacity: 0;
+  animation: callout-fade 0.3s ease-out calc(var(--d, 0s) + 0.35s) forwards;
+}
+
+.callout {
+  opacity: 0;
+  animation: callout-fade 0.2s ease-out var(--d, 0s) forwards;
+}
+
+@keyframes callout-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes callout-fade {
+  to { opacity: 1; }
 }
 
 /* ---------------------------------------------------------------- shell buttons */
