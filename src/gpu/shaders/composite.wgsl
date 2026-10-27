@@ -117,6 +117,15 @@ fn palette(i: f32) -> vec3f {
 // Rect of the device body (region kind 7); falls back to the full viewport.
 var<private> gDevice: vec4f;
 
+/** Rect of the first screen region (the main screen), or zero if none. */
+fn firstScreen() -> vec4f {
+  let n = u32(u.regionCount);
+  for (var i = 0u; i < n; i++) {
+    if (u.regions[i].params.x == K_SCREEN) { return u.regions[i].rect; }
+  }
+  return vec4f(0.0);
+}
+
 fn findDevice() -> vec4f {
   let n = u32(u.regionCount);
   for (var i = 0u; i < n; i++) {
@@ -544,6 +553,19 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
       roughness = 0.5;
     }
 
+    // HTML-in-Canvas only: the glossy bezel reflects the screen's live content,
+    // mirrored across the screen edge and fading with distance.
+    var bezelReflection = vec3f(0.0);
+    if (u.hasDom > 0.5 && screenIdx >= 0 && screenD < BEZEL + 4.0) {
+      let si = u32(screenIdx);
+      let g = normalize(vec2f(
+        regionSd(si, p + vec2f(1.0, 0.0)) - regionSd(si, p - vec2f(1.0, 0.0)),
+        regionSd(si, p + vec2f(0.0, 1.0)) - regionSd(si, p - vec2f(0.0, 1.0)),
+      ) + 1e-5);
+      let mirrored = textureSampleLevel(domTex, samp, uvOf(p - g * (2.0 * screenD + 2.0)), 0.0);
+      bezelReflection = mirrored.rgb * mirrored.a * exp(-screenD / 4.0) * 0.22;
+    }
+
     for (var i = 0u; i < n; i++) {
       let kind = u.regions[i].params.x;
       let d = regionSd(i, p);
@@ -572,6 +594,17 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
           if (kind == K_LENS) {
             let film = thinFilm(300.0 + 500.0 * x * x + 60.0 * sin(u.time), sqrt(max(0.0, 1.0 - x * x)));
             emissive += film * 0.9 * smoothstep(0.5, 1.0, x);
+
+            // HTML-in-Canvas only: the dome is a convex mirror holding a tiny, fish-eyed,
+            // mirrored copy of the main screen's live DOM.
+            let ms = firstScreen();
+            if (u.hasDom > 0.5 && ms.z > 0.0) {
+              let q = (p - c) / rad;
+              let fish = q * (0.55 + 0.45 * dot(q, q));
+              let sp = ms.xy + ms.zw * (0.5 + 0.5 * vec2f(-fish.x, fish.y));
+              let mirror = textureSampleLevel(domTex, samp, uvOf(sp), 0.0);
+              emissive += vec3f(0.55, 0.85, 1.0) * mirror.rgb * mirror.a * (1.0 - x * x) * 0.7;
+            }
           }
         } else {
           // Brushed chrome ring
@@ -598,7 +631,7 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     // Flake sparkle catching the pointer light
     col += vec3f(1.0, 0.9, 0.85) * mat.g * pow(lit.spec, 0.5) * 0.6;
     col += frontFill(p, baseN, micro, roughness, mat) * (1.0 - metal * 0.5);
-    col = aces(col) + emissive * 1.4;
+    col = aces(col) + emissive * 1.4 + bezelReflection;
 
     // DOM content drawn on the shell (labels, button captions)
     if (u.hasDom > 0.5) {
