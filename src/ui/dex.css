@@ -1,0 +1,414 @@
+:root {
+  --screen-ink: #c9fff1;
+  --screen-dim: #6fb8a8;
+  --shell-ink: #fff1ee;
+  --accent: #e84a4a;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #120607;
+}
+
+.stage {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+/* The drawable root covers the whole canvas 1:1 so hit-testing stays aligned. */
+.dex {
+  width: 100vw;
+  height: 100vh;
+  box-sizing: border-box;
+  overflow: hidden;
+  font-family: 'DotGothic16', system-ui, sans-serif;
+  color: var(--shell-ink);
+}
+
+.stage + .dex {
+  position: fixed;
+  inset: 0;
+}
+
+.dex-inner {
+  height: 100%;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 18px;
+  padding: 22px 34px 34px;
+}
+
+/* ---------------------------------------------------------------- top */
+
+.dex-top {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.lens {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.leds {
+  display: flex;
+  gap: 10px;
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+.led {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.brand {
+  margin: 0 0 0 auto;
+  font-family: 'Chakra Petch', sans-serif;
+  font-weight: 700;
+  font-size: 28px;
+  letter-spacing: 0.12em;
+  color: var(--shell-ink);
+}
+
+.brand small {
+  font-size: 0.5em;
+  opacity: 0.7;
+}
+
+.mode-chip {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  padding: 3px 8px;
+  border: 1px solid rgb(255 255 255 / 0.4);
+  border-radius: 99px;
+  opacity: 0.8;
+}
+
+/* ---------------------------------------------------------------- layout */
+
+.dex-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 40px;
+  min-height: 0;
+}
+
+.col-left,
+.col-right {
+  display: grid;
+  gap: 22px;
+  min-height: 0;
+}
+
+.col-left {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.col-right {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+/* ---------------------------------------------------------------- screens */
+
+.screen {
+  border-radius: 14px;
+  color: var(--screen-ink);
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.main-screen {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  padding: 24px;
+  align-items: start;
+  overflow: auto;
+}
+
+.holo-card {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  background: rgb(255 255 255 / 0.04);
+  display: grid;
+  place-items: center;
+}
+
+.holo-card img {
+  width: 92%;
+  height: auto;
+  filter: drop-shadow(0 8px 14px rgb(0 0 0 / 0.5));
+}
+
+.dex-no {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  font-size: 14px;
+  color: var(--screen-dim);
+}
+
+.profile h2 {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.profile .en {
+  display: block;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 14px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--screen-dim);
+}
+
+.genus {
+  margin: 6px 0 14px;
+  color: var(--screen-dim);
+}
+
+.types {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.type {
+  padding: 3px 12px;
+  border-radius: 99px;
+  border: 1px solid var(--type);
+  color: var(--type);
+  font-size: 14px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  margin: 0 0 14px;
+}
+
+.metrics dt {
+  color: var(--screen-dim);
+}
+
+.metrics dd {
+  margin: 0;
+}
+
+.flavor {
+  margin: 0;
+  line-height: 1.8;
+}
+
+.loading {
+  margin: auto;
+  grid-column: 1 / -1;
+  letter-spacing: 0.2em;
+}
+
+/* stats */
+
+.stat-screen {
+  padding: 14px 18px 8px;
+}
+
+.stat-head {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.15em;
+  color: var(--screen-dim);
+}
+
+.radar {
+  position: relative;
+  width: min(100%, 300px);
+  aspect-ratio: 1;
+  margin: 0 auto;
+}
+
+.radar-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  justify-items: center;
+  font-size: 12px;
+  color: var(--screen-dim);
+  white-space: nowrap;
+}
+
+.radar-label b {
+  font-weight: 400;
+  font-size: 15px;
+  color: var(--screen-ink);
+}
+
+/* list */
+
+.list-screen {
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 10px;
+}
+
+.search {
+  font: inherit;
+  color: var(--screen-ink);
+  background: rgb(0 0 0 / 0.25);
+  border: 1px solid rgb(201 255 241 / 0.3);
+  border-radius: 8px;
+  padding: 8px 12px;
+  outline: none;
+}
+
+.search:focus {
+  border-color: var(--screen-ink);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--screen-dim) transparent;
+}
+
+.list li {
+  display: flex;
+  gap: 14px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.list li:hover {
+  background: rgb(201 255 241 / 0.08);
+}
+
+.list li[aria-selected='true'] {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: #fff;
+}
+
+.list .no {
+  color: var(--screen-dim);
+}
+
+/* ---------------------------------------------------------------- shell buttons */
+
+.controls,
+.gens {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.gens {
+  gap: 8px;
+}
+
+.shell-btn {
+  font: 700 16px 'Chakra Petch', sans-serif;
+  letter-spacing: 0.08em;
+  color: var(--shell-ink);
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  min-width: 56px;
+  height: 46px;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.shell-btn.wide {
+  min-width: 120px;
+  font-family: 'DotGothic16', sans-serif;
+  font-weight: 400;
+}
+
+.shell-btn.gen {
+  min-width: 38px;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+.shell-btn.c2 {
+  color: #2a1c00;
+}
+
+/* ---------------------------------------------------------------- no WebGPU fallback */
+
+.no-gpu {
+  background: #b5121b;
+}
+
+.no-gpu .screen {
+  background: #0c1d20;
+  box-shadow: 0 0 0 10px #151517;
+}
+
+.no-gpu .lens {
+  background: radial-gradient(circle at 35% 35%, #9fe0ff, #1a6fd6 55%, #0b2c66);
+  box-shadow: 0 0 0 5px #ddd;
+}
+
+.no-gpu .led:nth-child(1) { background: #f33; }
+.no-gpu .led:nth-child(2) { background: #fc2; }
+.no-gpu .led:nth-child(3) { background: #3d5; }
+
+.no-gpu .shell-btn { background: #1b1b1f; }
+.no-gpu .shell-btn.c1 { background: var(--accent); }
+.no-gpu .shell-btn.c2 { background: #fac81f; }
+.no-gpu .shell-btn.c3 { background: #268cf2; }
+
+/* ---------------------------------------------------------------- narrow screens */
+
+@media (max-width: 860px) {
+  .dex {
+    overflow: auto;
+  }
+  .dex-inner {
+    height: auto;
+    padding: 16px;
+  }
+  .dex-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .main-screen {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .holo-card {
+    max-width: 280px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  .list-screen {
+    height: 60vh;
+  }
+}
