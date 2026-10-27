@@ -155,7 +155,8 @@ body,
 
 .main-screen {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* The artwork is the hero: it gets the wider column. */
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   gap: 24px;
   padding: 32px 24px 24px;
   align-items: start;
@@ -255,8 +256,11 @@ body,
   margin: 0;
 }
 
+/* Supporting copy stays a step below the hero and the name. */
 .flavor {
   margin: 0;
+  font-size: 13px;
+  color: var(--fui-ink-dim);
   line-height: 1.8;
 }
 
@@ -413,9 +417,11 @@ body,
   opacity: 0.75;
 }
 
+/* HUD layer: floats above the glass, so it shifts against the tilt. */
 .callouts {
   position: absolute;
   inset: 0;
+  translate: calc(var(--fui-px, 0) * var(--fui-depth-hud) * 1px) calc(var(--fui-py, 0) * var(--fui-depth-hud) * 1px);
   width: 100%;
   height: 100%;
   overflow: visible;
@@ -462,6 +468,21 @@ body,
 
 @keyframes callout-fade {
   to { opacity: 1; }
+}
+
+/* While analyzing, the profile is a dim placeholder so the eye stays on the artwork. */
+.profile.analyzing {
+  opacity: 0.45;
+}
+
+.profile.analyzing h2 {
+  font-size: 22px;
+  letter-spacing: 0.2em;
+  animation: analyzing-blink 1s steps(2, jump-none) infinite;
+}
+
+@keyframes analyzing-blink {
+  50% { opacity: 0.4; }
 }
 
 /* Panel headings: inverted index block + title + hairline rule. */

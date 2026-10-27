@@ -47,8 +47,15 @@ const INK = vec3f(0.62, 1.0, 0.92);
 const WARN = vec3f(1.0, 0.62, 0.18);
 /** Radius of the rounded outer rim of the shell. */
 const RIM = 18.0;
-/** How far the LCD content sits below the glass, and the (exaggerated) depth of its inner wall. */
-const SCREEN_DEPTH = 10.0;
+/**
+ * Depth layers inside a screen, in px below the glass (docs/fui/grammar.md §6).
+ * Deeper layers shift more as the device tilts, which separates them visually.
+ * The DOM sits on the glass (0) so hit-testing matches; the HUD layer floats
+ * above it and is offset in CSS (--fui-px/--fui-py, see Renderer).
+ */
+const DEPTH_BACKPLANE = 30.0;
+const DEPTH_DATA = 7.0;
+/** Exaggerated depth of the recess's inner wall. */
 const WALL_DEPTH = 40.0;
 /** Boot sequence: screen k powers on at BOOT_START + k * BOOT_STAGGER (keep in sync with dex.css). */
 const BOOT_START = 0.35;
@@ -399,12 +406,13 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let sc = sr.xy + sr.zw * 0.5;
     let local = (p - sc) / (sr.zw * 0.5);
 
-    // Barrel distortion + depth parallax (the panel sits below the glass).
-    // Both are kept small so hit-testing stays aligned.
-    let dp = local * dot(local, local) * 0.006 * sr.zw * 0.5 + parallax(SCREEN_DEPTH);
+    // Barrel distortion (kept small so hit-testing stays aligned) plus per-layer parallax.
+    let barrel = local * dot(local, local) * 0.006 * sr.zw * 0.5;
+    let dp = barrel + parallax(DEPTH_DATA);
+    let pBack = p + parallax(DEPTH_BACKPLANE);
 
     // LCD backplane: deep teal with a dot-matrix pattern.
-    let cell = fract(p / 3.0) - 0.5;
+    let cell = fract(pBack / 3.0) - 0.5;
     let dotMask = smoothstep(0.5, 0.3, length(cell));
     var bg = mix(vec3f(0.02, 0.06, 0.07), vec3f(0.03, 0.10, 0.11), 0.5 + 0.5 * local.y);
     bg += vec3f(0.02, 0.05, 0.05) * dotMask;
@@ -422,9 +430,9 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     if (u.hasDom > 0.5) {
       // Lens-like chromatic aberration toward the screen edges.
       let ca = normalize(local + 1e-4) * 0.24;
-      let dr = textureSampleLevel(domTex, samp, uvOf(p + dp + ca), 0.0);
-      let dg = textureSampleLevel(domTex, samp, uvOf(p + dp), 0.0);
-      let db = textureSampleLevel(domTex, samp, uvOf(p + dp - ca), 0.0);
+      let dr = textureSampleLevel(domTex, samp, uvOf(p + barrel + ca), 0.0);
+      let dg = textureSampleLevel(domTex, samp, uvOf(p + barrel), 0.0);
+      let db = textureSampleLevel(domTex, samp, uvOf(p + barrel - ca), 0.0);
       let dom = vec4f(dr.r, dg.g, db.b, dg.a);
       col = mix(col, dom.rgb, dom.a);
     }
@@ -468,7 +476,7 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     col = mix(col, wallShade, wall);
 
     // Registration crosshairs in each corner of the glass.
-    let cq = abs(p - sc) - (sr.zw * 0.5 - vec2f(8.0));
+    let cq = abs(p + dp - sc) - (sr.zw * 0.5 - vec2f(8.0));
     let arm = 4.5;
     let cross = max(
       smoothstep(0.8, 0.2, abs(cq.x)) * step(abs(cq.y), arm),

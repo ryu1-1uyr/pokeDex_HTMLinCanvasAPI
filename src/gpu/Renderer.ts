@@ -131,6 +131,7 @@ export class Renderer {
   /** Rotation part of the tilt, as 3 rows (object -> view). */
   private rotRows: number[] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]
   private appliedTransform = ''
+  private appliedParallax = ''
   private resizeObserver: ResizeObserver
   private disposers: (() => void)[] = []
 
@@ -342,6 +343,17 @@ export class Renderer {
 
     const rot = new DOMMatrix().rotate(this.tilt.x, this.tilt.y, 0)
     this.rotRows = [rot.m11, rot.m21, rot.m31, 0, rot.m12, rot.m22, rot.m32, 0, rot.m13, rot.m23, rot.m33, 0]
+
+    // Screen-space shift per px of depth below the glass (same as parallax() in the shader).
+    // DOM layers that float above the glass use it with a negative depth.
+    const px = (-rot.m31 / rot.m33).toFixed(4)
+    const py = (-rot.m32 / rot.m33).toFixed(4)
+    const parallax = `${px},${py}`
+    if (parallax !== this.appliedParallax) {
+      this.appliedParallax = parallax
+      this.ui.style.setProperty('--fui-px', px)
+      this.ui.style.setProperty('--fui-py', py)
+    }
     const persp = new DOMMatrix()
     persp.m34 = -1 / PERSPECTIVE
     this.tiltMatrix = new DOMMatrix().translate(cx, cy).multiply(persp).multiply(rot).translate(-cx, -cy)

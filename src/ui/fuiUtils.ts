@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 
+/** Seconds the lock-on reticle takes to settle; the callouts and profile wait for it. */
+export const LOCK_TIME = 0.55
+
 export const pad = (n: number, w: number) => String(Math.floor(n)).padStart(w, '0')
 
 /** Re-renders only the caller at `hz`, returning seconds since mount. */

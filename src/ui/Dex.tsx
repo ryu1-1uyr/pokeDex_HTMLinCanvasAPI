@@ -14,7 +14,7 @@ import { playCry as playCryAudio } from '../fx/cry'
 import { fx } from '../fx/fxStore'
 import { useRegion } from '../fx/useRegion'
 import { Callouts, Decode, LiveReadout, MicroText, PanelHeader, PointerReadout } from './fui'
-import { clock, wobble } from './fuiUtils'
+import { clock, LOCK_TIME, wobble } from './fuiUtils'
 
 const GENERATIONS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX']
 const STAT_LABELS = ['HP', 'こうげき', 'ぼうぎょ', 'とくこう', 'とくぼう', 'すばやさ']
@@ -73,6 +73,8 @@ export function Dex({ mode }: { mode: string }) {
   )
   // The <img> is hidden while the particle morph is running.
   const [art, setArt] = useState<{ src: string; visible: boolean } | null>(null)
+  // Hero first: the profile text decodes only after the artwork has re-assembled and been locked on.
+  const [profileId, setProfileId] = useState<number | null>(null)
   const mountedAt = useRef(performance.now())
   const radarRef = useRegion<HTMLDivElement>('radar', 0)
   const listEl = useRef<HTMLUListElement | null>(null)
@@ -122,7 +124,11 @@ export function Dex({ mode }: { mode: string }) {
           if (cancelled) return
           const morph = fx.morph(d.artwork, () => holoEl.current)
           morph.started.then(() => !cancelled && setArt({ src: d.artwork, visible: false }))
-          morph.done.then(() => !cancelled && setArt({ src: d.artwork, visible: true }))
+          morph.done.then(() => {
+          if (cancelled) return
+          setArt({ src: d.artwork, visible: true })
+          setTimeout(() => !cancelled && setProfileId(d.id), LOCK_TIME * 1000)
+        })
         }, bootWait)
       })
       .catch((e) => !cancelled && setError(String(e)))
@@ -177,6 +183,7 @@ export function Dex({ mode }: { mode: string }) {
   const sigma = detail ? Math.sqrt(detail.stats.reduce((a, s) => a + (s - total / 6) ** 2, 0) / 6) : 0
   const selectedIndex = filtered.findIndex((e) => e.id === selectedId)
   const peakIndex = detail ? detail.stats.indexOf(Math.max(...detail.stats)) : -1
+  const ready = detail != null && profileId === detail.id
 
   return (
     <div ref={deviceRef} className="dex-inner" style={accentCss ? ({ '--accent': accentCss } as CSSProperties) : undefined}>
@@ -229,35 +236,36 @@ export function Dex({ mode }: { mode: string }) {
                     />
                   )}
                 </div>
-                <div className="profile">
+                <div className={`profile${ready ? '' : ' analyzing'}`}>
                   <h2>
-                    <Decode text={detail.jaName} duration={350} />
+                    <Decode text={ready ? detail.jaName : 'ANALYZING'} duration={350} />
                     <span className="en">
-                      <Decode text={detail.name} duration={400} />
+                      <Decode text={ready ? detail.name : '— — —'} duration={400} />
                     </span>
                   </h2>
                   <p className="genus">
-                    <Decode text={detail.genus} />
+                    <Decode text={ready ? detail.genus : '…'} />
                   </p>
                   <div className="types">
-                    {detail.types.map((t) => (
-                      <span key={t} className="type" style={{ '--type': toCss(TYPE_COLORS[t]) } as CSSProperties}>
-                        {TYPE_JA[t] ?? t}
-                      </span>
-                    ))}
+                    {ready &&
+                      detail.types.map((t) => (
+                        <span key={t} className="type" style={{ '--type': toCss(TYPE_COLORS[t]) } as CSSProperties}>
+                          {TYPE_JA[t] ?? t}
+                        </span>
+                      ))}
                   </div>
                   <dl className="metrics">
                     <dt>たかさ</dt>
                     <dd>
-                      <Decode text={`${detail.height.toFixed(1)} m`} duration={300} />
+                      <Decode text={ready ? `${detail.height.toFixed(1)} m` : '--.- m'} duration={300} />
                     </dd>
                     <dt>おもさ</dt>
                     <dd>
-                      <Decode text={`${detail.weight.toFixed(1)} kg`} duration={300} />
+                      <Decode text={ready ? `${detail.weight.toFixed(1)} kg` : '--.- kg'} duration={300} />
                     </dd>
                   </dl>
                   <p className="flavor">
-                    <Decode text={detail.flavor} duration={700} />
+                    <Decode text={ready ? detail.flavor : ''} duration={700} />
                   </p>
                 </div>
               </>

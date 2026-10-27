@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
-import { pad, useTicker } from './fuiUtils'
+import { LOCK_TIME, pad, useTicker } from './fuiUtils'
 
 // Small "fictional UI" building blocks: corner micro text, live readouts and
 // callout lines anchored to features found in the artwork.
@@ -141,8 +141,6 @@ const VB_H = 400
 const ART = VB_W * 0.92
 const ART_X = (VB_W - ART) / 2
 const ART_Y = (VB_H - ART) / 2
-/** Callouts start once the lock-on reticle has settled (s); see .lock in dex.css. */
-const LOCK_TIME = 0.55
 const toCard = ([u, v]: [number, number]) => [ART_X + u * ART, ART_Y + v * ART] as const
 
 export function Callouts({
