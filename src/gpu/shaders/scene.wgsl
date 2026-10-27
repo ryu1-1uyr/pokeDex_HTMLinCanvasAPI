@@ -8,7 +8,8 @@ struct S {
   dpr: f32,
   time: f32,
   mouse: vec2f,
-  _pad: vec2f,
+  bgScale: f32,     // resolution of the background target relative to CSS px
+  _pad: f32,
   device: vec4f,    // flat device rect (x, y, w, h)
   shadow: vec4f,    // shadow offset xy, thickness, _
   hFront: array<vec4f, 3>,  // rows of inverse homography: screen -> flat (front face)
@@ -21,6 +22,7 @@ struct S {
 @group(0) @binding(0) var<uniform> u: S;
 @group(0) @binding(1) var samp: sampler;
 @group(0) @binding(2) var flatTex: texture_2d<f32>;
+@group(0) @binding(3) var bgTex: texture_2d<f32>;
 
 const DEVICE_RADIUS = 28.0;
 
@@ -177,10 +179,17 @@ fn background(s: vec2f) -> vec3f {
 
 // ---------------------------------------------------------------- main
 
+// The grass field is soft by design, so it renders into a low-resolution target
+// and is upscaled by fs; it is by far the most expensive part per pixel.
+@fragment
+fn fsBg(@builtin(position) frag: vec4f) -> @location(0) vec4f {
+  return vec4f(background(frag.xy / u.bgScale), 1.0);
+}
+
 @fragment
 fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
   let s = frag.xy / u.dpr;
-  var col = background(s);
+  var col = textureSampleLevel(bgTex, samp, s / u.res, 0.0).rgb;
 
   // Soft drop shadow cast by the floating device (from its back silhouette).
   let ds = deviceSd(unproject(u.hBack, s - u.shadow.xy));

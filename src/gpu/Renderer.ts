@@ -9,6 +9,10 @@ const UNIFORM_FLOATS = REGION_OFFSET + MAX_REGIONS * 8
 const SCENE_UNIFORM_FLOATS = 68
 const MATERIAL_SIZE = 1024
 const FLAT_FORMAT: GPUTextureFormat = 'rgba8unorm'
+/** Background resolution relative to CSS px (it is blurred anyway). */
+const BG_SCALE = 0.5
+/** Frame cap; avoids saturating the GPU on 120Hz displays. */
+const MIN_FRAME_MS = 1000 / 60 - 1.5
 
 /** Perspective distance (CSS px) and max tilt (deg) of the device. */
 const PERSPECTIVE = 1800
@@ -87,6 +91,7 @@ export class Renderer {
   private drawable: boolean
   private flatPipeline: GPURenderPipeline
   private scenePipeline: GPURenderPipeline
+  private bgPipeline: GPURenderPipeline
   private uniform: GPUBuffer
   private uniformData = new Float32Array(UNIFORM_FLOATS)
   private sceneUniform: GPUBuffer
@@ -96,6 +101,13 @@ export class Renderer {
   private material: GPUTexture
   private domTex: GPUTexture
   private flatTex!: GPUTexture
+  private bgTex!: GPUTexture
+  /** Cached bind groups; reset whenever a texture they reference is recreated. */
+  private bindGroups: { flat?: GPUBindGroup; scene?: GPUBindGroup; bg?: GPUBindGroup } = {}
+  /** True while the previous frame's GPU work is still in flight. */
+  private gpuBusy = false
+  private lastRender = 0
+  private disposed = false
   private hasDom = false
   private artMorph: ArtMorph
   private morphCard: () => HTMLElement | null = () => null
@@ -145,18 +157,28 @@ export class Renderer {
     this.uniform = ubo(UNIFORM_FLOATS)
     this.sceneUniform = ubo(SCENE_UNIFORM_FLOATS)
 
-    const pipeline = (label: string, code: string, format: GPUTextureFormat) => {
-      const module = device.createShaderModule({ label, code })
-      return device.createRenderPipeline({
+    const pipeline = (label: string, module: GPUShaderModule, format: GPUTextureFormat, entryPoint = 'fs') =>
+      device.createRenderPipeline({
         label,
         layout: 'auto',
         vertex: { module, entryPoint: 'vs' },
-        fragment: { module, entryPoint: 'fs', targets: [{ format }] },
+        fragment: { module, entryPoint, targets: [{ format }] },
         primitive: { topology: 'triangle-list' },
       })
-    }
-    this.flatPipeline = pipeline('composite', compositeWGSL, FLAT_FORMAT)
-    this.scenePipeline = pipeline('scene', sceneWGSL, this.format)
+    const sceneModule = device.createShaderModule({ label: 'scene', code: sceneWGSL })
+    this.flatPipeline = pipeline('composite', device.createShaderModule({ label: 'composite', code: compositeWGSL }), FLAT_FORMAT)
+    this.scenePipeline = pipeline('scene', sceneModule, this.format)
+    this.bgPipeline = pipeline('background', sceneModule, FLAT_FORMAT, 'fsBg')
+
+    device.lost.then((info) => {
+      if (info.reason === 'destroyed') return
+      // Stop issuing work on a dead device instead of spamming errors every frame.
+      console.warn('WebGPU device lost:', info.message)
+      cancelAnimationFrame(this.raf)
+    })
+    const onPageHide = () => this.dispose()
+    window.addEventListener('pagehide', onPageHide)
+    this.disposers.push(() => window.removeEventListener('pagehide', onPageHide))
 
     this.material = this.bakeMaterial()
     this.artMorph = new ArtMorph(device, FLAT_FORMAT)
@@ -180,7 +202,10 @@ export class Renderer {
     this.raf = requestAnimationFrame(this.frame)
   }
 
+  /** Releases the GPU device explicitly (also on pagehide) so a reload starts clean. */
   dispose() {
+    if (this.disposed) return
+    this.disposed = true
     cancelAnimationFrame(this.raf)
     this.resizeObserver.disconnect()
     this.disposers.forEach((d) => d())
@@ -239,13 +264,18 @@ export class Renderer {
       this.canvas.width = w
       this.canvas.height = h
     }
+    const target = (label: string, tw: number, th: number) =>
+      this.device.createTexture({
+        label,
+        size: [Math.max(1, tw), Math.max(1, th)],
+        format: FLAT_FORMAT,
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+      })
     this.flatTex?.destroy()
-    this.flatTex = this.device.createTexture({
-      label: 'flat-device',
-      size: [w, h],
-      format: FLAT_FORMAT,
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
-    })
+    this.flatTex = target('flat-device', w, h)
+    this.bgTex?.destroy()
+    this.bgTex = target('background', Math.ceil(this.cssW * BG_SCALE), Math.ceil(this.cssH * BG_SCALE))
+    this.bindGroups = {}
     if (this.drawable) {
       this.domTex.destroy()
       this.domTex = this.createDomTexture(w, h)
@@ -325,6 +355,10 @@ export class Renderer {
 
   private frame = (t: number) => {
     this.raf = requestAnimationFrame(this.frame)
+    // Backpressure: never queue a frame while the previous one is still on the GPU,
+    // otherwise work piles up when the GPU slows down (e.g. thermal throttling).
+    if (this.gpuBusy || t - this.lastRender < MIN_FRAME_MS) return
+    this.lastRender = t
     const dt = Math.min(1 / 30, this.lastT ? (t - this.lastT) / 1000 : 1 / 60)
     this.lastT = t
 
@@ -348,34 +382,64 @@ export class Renderer {
     this.writeUniforms(t / 1000)
     this.writeSceneUniforms(t / 1000, dev, front, frontInv, backInv)
 
-    const encoder = this.device.createCommandEncoder()
-    this.drawPass(encoder, this.flatTex.createView(), this.flatPipeline, [
-      { binding: 0, resource: { buffer: this.uniform } },
-      { binding: 1, resource: this.linear },
-      { binding: 2, resource: this.repeat },
-      { binding: 3, resource: this.domTex.createView() },
-      { binding: 4, resource: this.material.createView() },
-    ], (pass) => this.drawMorph(pass))
-    this.drawPass(encoder, this.context.getCurrentTexture().createView(), this.scenePipeline, [
-      { binding: 0, resource: { buffer: this.sceneUniform } },
-      { binding: 1, resource: this.linear },
-      { binding: 2, resource: this.flatTex.createView() },
+    const bg = this.bindGroups
+    bg.flat ??= this.bindGroup(this.flatPipeline, [
+      { buffer: this.uniform },
+      this.linear,
+      this.repeat,
+      this.domTex.createView(),
+      this.material.createView(),
     ])
+    bg.bg ??= this.bindGroup(this.bgPipeline, [{ buffer: this.sceneUniform }])
+    bg.scene ??= this.bindGroup(this.scenePipeline, [
+      { buffer: this.sceneUniform },
+      this.linear,
+      this.flatTex.createView(),
+      this.bgTex.createView(),
+    ])
+
+    const encoder = this.device.createCommandEncoder()
+    // The flat device only covers the device body: scissor away the rest.
+    const pad = 4
+    const sx = Math.max(0, Math.floor((dev[0] - pad) * this.dpr))
+    const sy = Math.max(0, Math.floor((dev[1] - pad) * this.dpr))
+    const sw = Math.min(this.flatTex.width, Math.ceil((dev[0] + dev[2] + pad) * this.dpr)) - sx
+    const sh = Math.min(this.flatTex.height, Math.ceil((dev[1] + dev[3] + pad) * this.dpr)) - sy
+    this.drawPass(encoder, this.flatTex.createView(), this.flatPipeline, bg.flat, (pass) => {
+      if (sw > 0 && sh > 0) pass.setScissorRect(sx, sy, sw, sh)
+    }, (pass) => this.drawMorph(pass))
+    this.drawPass(encoder, this.bgTex.createView(), this.bgPipeline, bg.bg)
+    this.drawPass(encoder, this.context.getCurrentTexture().createView(), this.scenePipeline, bg.scene)
     this.device.queue.submit([encoder.finish()])
+
+    this.gpuBusy = true
+    this.device.queue.onSubmittedWorkDone().then(
+      () => (this.gpuBusy = false),
+      () => {},
+    )
+  }
+
+  private bindGroup(pipeline: GPURenderPipeline, resources: GPUBindingResource[]) {
+    return this.device.createBindGroup({
+      layout: pipeline.getBindGroupLayout(0),
+      entries: resources.map((resource, binding) => ({ binding, resource })),
+    })
   }
 
   private drawPass(
     encoder: GPUCommandEncoder,
     view: GPUTextureView,
     pipeline: GPURenderPipeline,
-    entries: GPUBindGroupEntry[],
+    bindGroup: GPUBindGroup,
+    before?: (pass: GPURenderPassEncoder) => void,
     after?: (pass: GPURenderPassEncoder) => void,
   ) {
     const pass = encoder.beginRenderPass({
       colorAttachments: [{ view, loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }],
     })
     pass.setPipeline(pipeline)
-    pass.setBindGroup(0, this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries }))
+    pass.setBindGroup(0, bindGroup)
+    before?.(pass)
     pass.draw(3)
     after?.(pass)
     pass.end()
@@ -425,7 +489,7 @@ export class Renderer {
   private writeSceneUniforms(time: number, dev: Rect, front: Mat3, frontInv: Mat3, backInv: Mat3) {
     const d = this.sceneData
     d.set([this.cssW, this.cssH, this.dpr, time], 0)
-    d.set([this.mouse.x, this.mouse.y, 0, 0], 4)
+    d.set([this.mouse.x, this.mouse.y, BG_SCALE, 0], 4)
     d.set(dev, 8)
     d.set([-this.tilt.y * 3, 26 + this.tilt.x * 2, THICKNESS, 0], 12)
     for (let row = 0; row < 3; row++) {

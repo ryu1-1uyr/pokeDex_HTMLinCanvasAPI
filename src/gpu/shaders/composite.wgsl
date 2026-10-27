@@ -174,10 +174,12 @@ fn shellHeight(p: vec2f) -> f32 {
 }
 
 fn shellNormal(p: vec2f) -> vec3f {
+  // Forward differences: 3 height evaluations instead of 4 (each loops all regions).
   let e = 1.0;
-  let hx = shellHeight(p + vec2f(e, 0.0)) - shellHeight(p - vec2f(e, 0.0));
-  let hy = shellHeight(p + vec2f(0.0, e)) - shellHeight(p - vec2f(0.0, e));
-  return normalize(vec3f(-hx, -hy, 2.0 * e));
+  let h0 = shellHeight(p);
+  let hx = shellHeight(p + vec2f(e, 0.0)) - h0;
+  let hy = shellHeight(p + vec2f(0.0, e)) - h0;
+  return normalize(vec3f(-hx, -hy, e));
 }
 
 // Studio environment: soft top light box + floor bounce, sampled by reflection vector.
