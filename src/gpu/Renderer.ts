@@ -115,6 +115,7 @@ export class Renderer {
   private panels: Panels
   /** Set when the root's hit-testing geometry changed this frame. */
   private rootMoved = false
+  private panelsDisabled = false
   /** True while the previous frame's GPU work is still in flight. */
   private gpuBusy = false
   private lastRender = 0
@@ -317,10 +318,17 @@ export class Renderer {
   private attachHtmlInCanvas(ui: HTMLElement) {
     const onPaint = () => {
       this.copyElement(ui, this.domTex)
-      // Screens are nested drawables, excluded from the root snapshot and captured separately.
-      this.panels.paint(this.dpr)
       this.hasDom = true
       this.appliedTransform = ''
+      // Screens are nested drawables, excluded from the root snapshot and captured separately.
+      // If this build can't capture them, fall back to drawing everything through the root.
+      if (!this.panelsDisabled) {
+        try {
+          this.panels.paint(this.dpr)
+        } catch (error) {
+          this.disablePanels(error)
+        }
+      }
     }
     this.canvas.addEventListener('paint', onPaint)
     this.disposers.push(() => this.canvas.removeEventListener('paint', onPaint))
@@ -328,19 +336,49 @@ export class Renderer {
   }
 
   /** Copies an element's current snapshot into a texture of the same size. */
+  /**
+   * The WebGPU entry point changed across Chrome releases: Chrome 155+ has
+   * drawElementImageToTexture(source, { texture, size }); 150-154 has
+   * copyElementImageToTexture({ source }, { destination, width, height }); earlier builds
+   * took (element, width, height, destination). Pick by feature detection so a failure
+   * surfaces its real error instead of the last fallback's.
+   */
   private copyElement(el: Element, texture: GPUTexture) {
     const { width, height } = texture
     const queue = this.device.queue
+    if (queue.drawElementImageToTexture) {
+      queue.drawElementImageToTexture({ source: el }, { texture, size: { width, height } })
+      return
+    }
     try {
-      queue.drawElementImageToTexture!({ source: el }, { texture, size: { width, height } })
-    } catch {
-      // Older Canary builds shipped `copyElementImageToTexture` with a different signature.
+      queue.copyElementImageToTexture!({ source: el }, { destination: { texture }, width, height })
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error
+      // Pre-150 positional signature; if that fails too, report both errors.
       try {
-        queue.copyElementImageToTexture!({ source: el }, { destination: { texture }, width, height })
-      } catch {
         queue.copyElementImageToTexture!(el, width, height, { texture })
+      } catch (legacyError) {
+        throw new AggregateError([error, legacyError], 'copyElementImageToTexture failed with both signatures')
       }
     }
+  }
+
+  /** Turns the floating panels off and lets the root snapshot include the screens again. */
+  private disablePanels(error: unknown) {
+    this.panelsDisabled = true
+    const screens = [...fx.regions].filter((r) => r.kind === 'screen').map((r) => r.el)
+    console.warn('[pokedex-gpu] Floating panels disabled: capturing a nested drawable failed.', {
+      error,
+      screens: screens.map((el) => {
+        const [, , w, h] = layoutRect(el)
+        return { className: el.className, cssSize: [w, h], defaultSize: this.canvas.getElementImageDefaultSize?.(el) }
+      }),
+      dpr: this.dpr,
+    })
+    // Removing the attribute puts the screens back into the root's snapshot.
+    screens.forEach((el) => el.removeAttribute('drawable'))
+    this.panels.setElements([])
+    this.canvas.requestPaint?.()
   }
 
   private attachPointer() {
@@ -543,7 +581,7 @@ export class Renderer {
     d.fill(0, REGION_OFFSET + n * 8)
     d[7] = n
     // Screens double as HTML-in-Canvas panels, in the same order the shader sees them.
-    if (this.drawable && this.panels.setElements(screens)) this.canvas.requestPaint?.()
+    if (this.drawable && !this.panelsDisabled && this.panels.setElements(screens)) this.canvas.requestPaint?.()
     return dev
   }
 

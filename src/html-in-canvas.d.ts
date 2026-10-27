@@ -23,6 +23,8 @@ declare global {
   interface HTMLCanvasElement {
     requestPaint?(): void
     updateElementGeometry?(element: Element, options?: UpdateElementGeometryOptions): void
+    /** Snapshot size of a drawable element in canvas grid coordinates (not in every build). */
+    getElementImageDefaultSize?(element: Element): { width: number; height: number }
   }
 
   interface GPUDrawElementImageSource {

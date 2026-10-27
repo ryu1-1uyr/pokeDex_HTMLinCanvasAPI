@@ -98,9 +98,11 @@ export class Panels {
   /** Called from the canvas `paint` event: snapshot every panel into its texture. */
   paint(dpr: number) {
     for (const p of this.panels) {
+      // Prefer the browser's own snapshot size; otherwise assume CSS size x devicePixelRatio.
+      const native = this.canvas.getElementImageDefaultSize?.(p.el)
       const [, , w, h] = this.deps.layoutRect(p.el)
-      const tw = Math.max(1, Math.round(w * dpr))
-      const th = Math.max(1, Math.round(h * dpr))
+      const tw = Math.max(1, Math.round(native?.width ?? w * dpr))
+      const th = Math.max(1, Math.round(native?.height ?? h * dpr))
       if (!p.tex || p.tex.width !== tw || p.tex.height !== th) {
         p.tex?.destroy()
         p.tex = this.texture(tw, th, 'panel')
