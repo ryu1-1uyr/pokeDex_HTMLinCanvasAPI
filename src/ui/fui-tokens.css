@@ -1,0 +1,18 @@
+/* FUI design tokens. Values and rationale: docs/fui/grammar.md.
+   Shader counterparts (INK, WARN, BOOT_*) live in src/gpu/shaders/composite.wgsl. */
+:root {
+  /* Color roles */
+  --fui-ink: #b8fff0;
+  --fui-ink-dim: #5fa797;
+  --fui-line: rgb(184 255 240 / 0.3);
+  --fui-warn: #ffb547;
+
+  /* Type */
+  --fui-mono: 'Share Tech Mono', ui-monospace, monospace;
+
+  /* Motion */
+  --fui-snap: 0.28s cubic-bezier(0.2, 0.9, 0.2, 1);
+  --fui-draw-dur: 0.45s;
+  --fui-draw-ease: cubic-bezier(0.6, 0, 0.2, 1);
+  --fui-fade: 0.3s ease-out;
+}

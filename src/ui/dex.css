@@ -1,9 +1,4 @@
-/* FUI grammar: one ink (cyan) + one warning color; type colors only as small markers. */
 :root {
-  --screen-ink: #b8fff0;
-  --screen-dim: #5fa797;
-  --screen-line: rgb(184 255 240 / 0.3);
-  --warn: #ffb547;
   --shell-ink: #fff1ee;
   --accent: #e84a4a;
   color-scheme: dark;
@@ -138,7 +133,7 @@ body,
 .screen {
   position: relative;
   border-radius: 14px;
-  color: var(--screen-ink);
+  color: var(--fui-ink);
   min-height: 0;
   box-sizing: border-box;
 }
@@ -162,7 +157,7 @@ body,
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 24px;
-  padding: 24px;
+  padding: 32px 24px 24px;
   align-items: start;
   overflow: auto;
 }
@@ -171,7 +166,7 @@ body,
   position: relative;
   aspect-ratio: 3 / 4;
   border-radius: 4px;
-  border: 1px solid var(--screen-line);
+  border: 1px solid var(--fui-line);
   background: rgb(184 255 240 / 0.03);
   display: grid;
   place-items: center;
@@ -197,7 +192,7 @@ body,
   top: 10px;
   left: 12px;
   font-size: 14px;
-  color: var(--screen-dim);
+  color: var(--fui-ink-dim);
 }
 
 .profile h2 {
@@ -213,12 +208,12 @@ body,
   font-size: 14px;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--screen-dim);
+  color: var(--fui-ink-dim);
 }
 
 .genus {
   margin: 6px 0 14px;
-  color: var(--screen-dim);
+  color: var(--fui-ink-dim);
 }
 
 .types {
@@ -232,8 +227,8 @@ body,
   align-items: center;
   gap: 7px;
   padding: 2px 10px 2px 7px;
-  border: 1px solid var(--screen-line);
-  color: var(--screen-ink);
+  border: 1px solid var(--fui-line);
+  color: var(--fui-ink);
   font-size: 13px;
 }
 
@@ -253,7 +248,7 @@ body,
 }
 
 .metrics dt {
-  color: var(--screen-dim);
+  color: var(--fui-ink-dim);
 }
 
 .metrics dd {
@@ -277,15 +272,6 @@ body,
   padding: 14px 18px 20px;
 }
 
-.stat-head {
-  display: flex;
-  justify-content: space-between;
-  font-family: 'Share Tech Mono', ui-monospace, monospace;
-  font-size: 12px;
-  letter-spacing: 0.15em;
-  color: var(--screen-dim);
-}
-
 .radar {
   position: relative;
   width: min(100%, 300px);
@@ -299,15 +285,15 @@ body,
   display: grid;
   justify-items: center;
   font-size: 12px;
-  color: var(--screen-dim);
+  color: var(--fui-ink-dim);
   white-space: nowrap;
 }
 
 .radar-label b {
-  font-family: 'Share Tech Mono', ui-monospace, monospace;
+  font-family: var(--fui-mono);
   font-weight: 400;
   font-size: 15px;
-  color: var(--screen-ink);
+  color: var(--fui-ink);
 }
 
 /* list */
@@ -315,22 +301,22 @@ body,
 .list-screen {
   display: flex;
   flex-direction: column;
-  padding: 14px 14px 24px;
+  padding: 10px 14px 24px;
   gap: 10px;
 }
 
 .search {
   font: inherit;
-  color: var(--screen-ink);
+  color: var(--fui-ink);
   background: rgb(0 0 0 / 0.25);
-  border: 1px solid var(--screen-line);
+  border: 1px solid var(--fui-line);
   border-radius: 2px;
   padding: 8px 12px;
   outline: none;
 }
 
 .search:focus {
-  border-color: var(--screen-ink);
+  border-color: var(--fui-ink);
 }
 
 .list {
@@ -340,7 +326,7 @@ body,
   overflow: auto;
   min-height: 0;
   scrollbar-width: thin;
-  scrollbar-color: var(--screen-dim) transparent;
+  scrollbar-color: var(--fui-ink-dim) transparent;
 }
 
 .list li {
@@ -358,13 +344,13 @@ body,
 .list li[aria-selected='true'] {
   position: relative;
   background: rgb(184 255 240 / 0.12);
-  box-shadow: inset 2px 0 0 var(--screen-ink);
-  color: var(--screen-ink);
+  box-shadow: inset 2px 0 0 var(--fui-ink);
+  color: var(--fui-ink);
 }
 
 /* Corner brackets that snap onto the selected row. */
 .list li[aria-selected='true']::after {
-  --c: var(--screen-ink);
+  --c: var(--fui-ink);
   content: '';
   position: absolute;
   inset: -1px;
@@ -378,7 +364,7 @@ body,
     linear-gradient(var(--c), var(--c)) bottom left / 1px 8px no-repeat,
     linear-gradient(var(--c), var(--c)) bottom right / 8px 1px no-repeat,
     linear-gradient(var(--c), var(--c)) bottom right / 1px 8px no-repeat;
-  animation: bracket-snap 0.28s cubic-bezier(0.2, 0.9, 0.2, 1);
+  animation: bracket-snap var(--fui-snap);
 }
 
 @keyframes bracket-snap {
@@ -391,11 +377,11 @@ body,
 .list .no,
 .dex-no,
 .metrics dd {
-  font-family: 'Share Tech Mono', ui-monospace, monospace;
+  font-family: var(--fui-mono);
 }
 
 .list .no {
-  color: var(--screen-dim);
+  color: var(--fui-ink-dim);
 }
 
 /* ---------------------------------------------------------------- FUI layers */
@@ -403,14 +389,14 @@ body,
 .micro,
 .hud,
 .callout-text {
-  font-family: 'Share Tech Mono', ui-monospace, monospace;
+  font-family: var(--fui-mono);
   letter-spacing: 0.08em;
 }
 
 .micro {
   position: absolute;
   font-size: 10px;
-  color: var(--screen-dim);
+  color: var(--fui-ink-dim);
   opacity: 0.85;
   pointer-events: none;
   white-space: nowrap;
@@ -438,31 +424,31 @@ body,
 
 .callout-line {
   fill: none;
-  stroke: var(--screen-ink);
+  stroke: var(--fui-ink);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
-  animation: callout-draw 0.45s cubic-bezier(0.6, 0, 0.2, 1) var(--d, 0s) forwards;
+  animation: callout-draw var(--fui-draw-dur) var(--fui-draw-ease) var(--d, 0s) forwards;
   opacity: 0.8;
 }
 
 .callout-ring {
   fill: none;
-  stroke: var(--screen-ink);
+  stroke: var(--fui-ink);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
 
 .callout-dot {
-  fill: var(--screen-ink);
+  fill: var(--fui-ink);
 }
 
 .callout-text {
   font-size: 15px;
-  fill: var(--screen-ink);
+  fill: var(--fui-ink);
   opacity: 0;
-  animation: callout-fade 0.3s ease-out calc(var(--d, 0s) + 0.35s) forwards;
+  animation: callout-fade var(--fui-fade) calc(var(--d, 0s) + 0.35s) forwards;
 }
 
 .callout {
@@ -476,6 +462,88 @@ body,
 
 @keyframes callout-fade {
   to { opacity: 1; }
+}
+
+/* Panel headings: inverted index block + title + hairline rule. */
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 11px var(--fui-mono);
+  letter-spacing: 0.14em;
+  color: var(--fui-ink);
+}
+
+.panel-head b {
+  font-weight: 400;
+  padding: 0 4px;
+  background: var(--fui-ink);
+  color: #06201c;
+}
+
+.panel-head i {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--fui-line), transparent);
+}
+
+.panel-aside {
+  color: var(--fui-ink-dim);
+}
+
+.main-screen > .panel-head {
+  position: absolute;
+  top: 8px;
+  left: 14px;
+  width: 40%;
+}
+
+/* Warn: the single point of interest on the stats screen. */
+.radar-label.peak,
+.radar-label.peak b {
+  color: var(--fui-warn);
+}
+
+.radar-label em {
+  font: normal 9px var(--fui-mono);
+  letter-spacing: 0.12em;
+  color: var(--fui-warn);
+}
+
+/* Lock-on reticle: brackets collapse onto the artwork, then the label blinks. */
+.lock {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lock-on 0.45s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.lock-bracket {
+  fill: none;
+  stroke: var(--fui-ink);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.lock-text {
+  font: 13px var(--fui-mono);
+  letter-spacing: 0.1em;
+  fill: var(--fui-ink);
+  animation: lock-blink 0.5s steps(2, jump-none) 0.35s 2 both;
+}
+
+@keyframes lock-on {
+  from {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  60% {
+    opacity: 1;
+  }
+}
+
+@keyframes lock-blink {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
 }
 
 /* ---------------------------------------------------------------- shell buttons */

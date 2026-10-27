@@ -13,7 +13,7 @@ import {
 import { playCry as playCryAudio } from '../fx/cry'
 import { fx } from '../fx/fxStore'
 import { useRegion } from '../fx/useRegion'
-import { Callouts, Decode, LiveReadout, MicroText, PointerReadout } from './fui'
+import { Callouts, Decode, LiveReadout, MicroText, PanelHeader, PointerReadout } from './fui'
 import { clock, wobble } from './fuiUtils'
 
 const GENERATIONS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX']
@@ -176,6 +176,7 @@ export function Dex({ mode }: { mode: string }) {
   const total = detail?.stats.reduce((a, b) => a + b, 0) ?? 0
   const sigma = detail ? Math.sqrt(detail.stats.reduce((a, s) => a + (s - total / 6) ** 2, 0) / 6) : 0
   const selectedIndex = filtered.findIndex((e) => e.id === selectedId)
+  const peakIndex = detail ? detail.stats.indexOf(Math.max(...detail.stats)) : -1
 
   return (
     <div ref={deviceRef} className="dex-inner" style={accentCss ? ({ '--accent': accentCss } as CSSProperties) : undefined}>
@@ -196,6 +197,7 @@ export function Dex({ mode }: { mode: string }) {
       <main className="dex-body">
         <section className="col-left">
           <div ref={mainScreenRef} className="screen main-screen">
+            <PanelHeader index="01" title="PROFILE" />
             <MicroText at="tr">
               SYS.DEX // GEN-{GENERATIONS[gen - 1]} // ID-{pad(detail?.id ?? 0)}
             </MicroText>
@@ -218,6 +220,7 @@ export function Dex({ mode }: { mode: string }) {
                   {art?.visible && (
                     <Callouts
                       src={art.src}
+                      target={pad(detail.id)}
                       labels={{
                         apex: `APEX // H ${detail.height.toFixed(1)}M`,
                         core: `CORE // W ${detail.weight.toFixed(1)}KG`,
@@ -285,21 +288,19 @@ export function Dex({ mode }: { mode: string }) {
               NORM {STAT_SCALE} · σ {sigma.toFixed(1)}
             </MicroText>
             <LiveReadout at="br" render={(t) => `SIG ${(-42 + wobble(t, 3, 2.5)).toFixed(1)}dB`} />
-            <div className="stat-head">
-              <span>BASE STATS</span>
-              <span>合計 {total}</span>
-            </div>
+            <PanelHeader index="02" title="BASE STATS" aside={`Σ ${total}`} />
             <div ref={radarRef} className="radar">
               {STAT_LABELS.map((label, i) => {
                 const a = -Math.PI / 2 + (i * Math.PI) / 3
                 return (
                   <span
                     key={label}
-                    className="radar-label"
+                    className={`radar-label${i === peakIndex ? ' peak' : ''}`}
                     style={{ left: `${50 + Math.cos(a) * 45}%`, top: `${50 + Math.sin(a) * 45}%` }}
                   >
                     {label}
                     <b>{detail?.stats[i] ?? '-'}</b>
+                    {i === peakIndex && <em>PEAK</em>}
                   </span>
                 )
               })}
@@ -315,6 +316,7 @@ export function Dex({ mode }: { mode: string }) {
           </div>
 
           <div ref={listScreenRef} className="screen list-screen">
+            <PanelHeader index="03" title="INDEX" />
             <MicroText at="bl">BUF {pad(selectedIndex + 1)}</MicroText>
             <MicroText at="br">
               IDX {filtered.length}/{entries.length}

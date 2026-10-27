@@ -42,8 +42,9 @@ const K_LED = 6.0;
 const K_DEVICE = 7.0;
 const DEVICE_RADIUS = 28.0;
 const BEZEL = 12.0;
-/** FUI ink: every line/label element shares this one color. */
+/** FUI color roles (see docs/fui/grammar.md); mirror --fui-ink / --fui-warn. */
 const INK = vec3f(0.62, 1.0, 0.92);
+const WARN = vec3f(1.0, 0.62, 0.18);
 /** Radius of the rounded outer rim of the shell. */
 const RIM = 18.0;
 /** How far the LCD content sits below the glass, and the (exaggerated) depth of its inner wall. */
@@ -339,11 +340,20 @@ fn radar(p: vec2f, rect: vec4f, base: vec3f) -> vec3f {
   let outline = mix(INK, accent, 0.25);
   col += outline * (exp(-abs(edge) * 0.7) * 0.9 + exp(-abs(edge) * 0.08) * 0.12);
 
-  // Vertex dots
+  // Vertex dots; the highest stat is the screen's single warn-colored point of interest.
+  var peak = 0;
+  for (var k = 1; k < 6; k++) {
+    if (statAt(k) > statAt(peak)) { peak = k; }
+  }
   for (var k = 0; k < 6; k++) {
     let vp = axisDir(k) * max(statAt(k), 0.02) * R;
     let d = length(q - vp);
-    col += vec3f(1.0) * smoothstep(3.0, 1.5, d) + INK * exp(-d * 0.3) * 0.35;
+    if (k == peak) {
+      col += WARN * (smoothstep(3.5, 1.5, d) * 1.8 + exp(-d * 0.22) * 0.6);
+      col += WARN * smoothstep(1.0, 0.0, abs(d - 7.0)) * 0.7;
+    } else {
+      col += vec3f(1.0) * smoothstep(3.0, 1.5, d) + INK * exp(-d * 0.3) * 0.35;
+    }
   }
 
   // Rotating sweep beam, like an old radar scope
