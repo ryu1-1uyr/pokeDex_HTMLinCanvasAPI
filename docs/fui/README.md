@@ -11,6 +11,9 @@
 | [checklist.md](checklist.md) | レビュー用チェックリストと採点履歴 |
 | [references.md](references.md) | 参考文献。資料ごとの要点と、根拠にしている原則 |
 
+汎用化した版は Claude Code の個人スキル `fui-design`（`~/.claude/skills/fui-design/`）にまとめている。
+ここで得た知見のうち、このプロジェクトに依存しないものはスキル側にも反映する。
+
 ## 進め方
 
 1. **作る**: 1 つの演出を実装する。
