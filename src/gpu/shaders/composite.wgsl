@@ -214,7 +214,7 @@ fn lightAt(p: vec2f, n: vec3f, roughness: f32) -> Lit {
 // and an exaggerated micro normal makes the molded texture, flakes and scratches read
 // inside that band.
 fn frontFill(p: vec2f, baseN: vec3f, micro: vec3f, roughness: f32, mat: vec4f) -> vec3f {
-  let fineN = rotN(normalize(baseN + micro * 3.0));
+  let fineN = rotN(normalize(baseN + micro * 1.4));
   let dc = gDevice.xy + gDevice.zw * 0.5;
   let viewP = normalize(vec3f((dc - p) / 1600.0, 1.0));
   let r = reflect(-viewP, fineN);
@@ -222,7 +222,7 @@ fn frontFill(p: vec2f, baseN: vec3f, micro: vec3f, roughness: f32, mat: vec4f) -
   let d = max(dot(r, box), 0.0);
   let band = pow(d, 30.0) * 0.28 * (1.0 - roughness * 0.6);
   // Scratches and flakes glint where the band falls
-  let glints = (mat.b * 0.6 + mat.g * 0.5) * pow(d, 10.0) * 0.35;
+  let glints = (mat.b * 0.6 + mat.g * 0.5) * pow(d, 10.0) * 0.2;
   return vec3f(1.0, 0.97, 0.94) * (band + glints);
 }
 
@@ -446,7 +446,7 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let my = sampleMat(p + vec2f(0.0, e)).r - sampleMat(p - vec2f(0.0, e)).r;
     let micro = vec3f(-mx, -my, 0.0);
     // Light in view space so reflections slide across the body as it tilts.
-    let nrm = rotN(normalize(baseN + micro * 0.9));
+    let nrm = rotN(normalize(baseN + micro * 0.45));
 
     var albedo = vec3f(0.78, 0.06, 0.09) * (0.92 + 0.12 * mat.a);
     var roughness = 0.35 + mat.a * 0.25 - mat.b * 0.2;

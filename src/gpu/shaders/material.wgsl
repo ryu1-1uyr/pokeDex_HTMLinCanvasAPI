@@ -90,7 +90,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   if (any(vec2f(id.xy) >= vec2f(SIZE))) { return; }
   let uv = (vec2f(id.xy) + 0.5) / SIZE;
 
-  let peel = fbm(uv, 64.0, 4) * 0.5 + 0.5;
+  let peel = fbm(uv, 128.0, 3) * 0.5 + 0.5;
   let flake = flakes(uv, 180.0);
   let scr = scratches(uv, 14.0) * (0.5 + 0.5 * fbm(uv, 4.0, 2));
   let smudge = fbm(uv + 0.37, 3.0, 5) * 0.5 + 0.5;
