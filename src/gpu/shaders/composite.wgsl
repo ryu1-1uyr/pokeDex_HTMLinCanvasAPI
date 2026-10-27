@@ -39,6 +39,8 @@ const K_LED = 6.0;
 const K_DEVICE = 7.0;
 const DEVICE_RADIUS = 28.0;
 const BEZEL = 12.0;
+/** FUI ink: every line/label element shares this one color. */
+const INK = vec3f(0.62, 1.0, 0.92);
 /** Radius of the rounded outer rim of the shell. */
 const RIM = 18.0;
 /** How far the LCD content sits below the glass, and the (exaggerated) depth of its inner wall. */
@@ -300,16 +302,26 @@ fn radar(p: vec2f, rect: vec4f, base: vec3f) -> vec3f {
   let hexR = polyRadius(dir, da, db);
   for (var k = 1; k <= 4; k++) {
     let rr = hexR * R * f32(k) * 0.25;
-    let line = smoothstep(1.2, 0.0, abs(dist - rr));
-    col += vec3f(0.3, 0.9, 0.8) * line * select(0.12, 0.3, k == 4);
+    let line = smoothstep(1.0, 0.0, abs(dist - rr));
+    col += INK * line * select(0.08, 0.22, k == 4);
   }
   // Axis spokes
   for (var k = 0; k < 6; k++) {
     let ad = axisDir(k);
     let t = clamp(dot(q, ad), 0.0, R);
     let d = length(q - ad * t);
-    col += vec3f(0.3, 0.9, 0.8) * smoothstep(1.0, 0.0, d) * 0.15;
+    col += INK * smoothstep(0.9, 0.0, d) * 0.1;
   }
+
+  // Graduated outer ring: minor tick every 10°, major every 30°.
+  let ringR = R * 1.1;
+  col += INK * smoothstep(0.9, 0.0, abs(dist - ringR)) * 0.22;
+  let step10 = PI / 18.0;
+  let k10 = round(ang / step10);
+  let tickLen = select(3.5, 7.0, i32(k10) % 3 == 0);
+  let tickArc = abs(ang - k10 * step10) * dist;
+  let inBand = step(ringR, dist) * step(dist, ringR + tickLen);
+  col += INK * smoothstep(0.8, 0.2, tickArc) * inBand * 0.35;
 
   // Stat polygon
   let pa = da * max(statAt(sector), 0.02) * R;
@@ -320,14 +332,15 @@ fn radar(p: vec2f, rect: vec4f, base: vec3f) -> vec3f {
   let accent = u.accent.rgb;
   let fill = mix(accent * 0.35, mix(accent, u.accent2.rgb, 0.5) * 0.9, dist / max(pr, 1.0));
   col = mix(col, col * 0.4 + fill, inside * 0.85);
-  // Glowing outline
-  col += accent * (exp(-abs(edge) * 0.6) * 0.9 + exp(-abs(edge) * 0.08) * 0.15);
+  // Glowing outline in the shared ink; the type color only tints the fill.
+  let outline = mix(INK, accent, 0.25);
+  col += outline * (exp(-abs(edge) * 0.7) * 0.9 + exp(-abs(edge) * 0.08) * 0.12);
 
   // Vertex dots
   for (var k = 0; k < 6; k++) {
     let vp = axisDir(k) * max(statAt(k), 0.02) * R;
     let d = length(q - vp);
-    col += vec3f(1.0) * smoothstep(3.5, 1.5, d) + accent * exp(-d * 0.25) * 0.4;
+    col += vec3f(1.0) * smoothstep(3.0, 1.5, d) + INK * exp(-d * 0.3) * 0.35;
   }
 
   // Rotating sweep beam, like an old radar scope
@@ -440,6 +453,15 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let wall = smoothstep(-1.0, 1.0, wallD);
     let wallShade = vec3f(0.035, 0.035, 0.045) + vec3f(0.03) * smoothstep(0.0, 10.0, wallD);
     col = mix(col, wallShade, wall);
+
+    // Registration crosshairs in each corner of the glass.
+    let cq = abs(p - sc) - (sr.zw * 0.5 - vec2f(8.0));
+    let arm = 4.5;
+    let cross = max(
+      smoothstep(0.8, 0.2, abs(cq.x)) * step(abs(cq.y), arm),
+      smoothstep(0.8, 0.2, abs(cq.y)) * step(abs(cq.x), arm),
+    );
+    col += INK * cross * 0.45;
 
     // Glass reflections: the room in front of the device + pointer glint.
     let glint = exp(-length(p - u.mouse) * 0.02) * 0.12;

@@ -1,6 +1,9 @@
+/* FUI grammar: one ink (cyan) + one warning color; type colors only as small markers. */
 :root {
-  --screen-ink: #c9fff1;
-  --screen-dim: #6fb8a8;
+  --screen-ink: #b8fff0;
+  --screen-dim: #5fa797;
+  --screen-line: rgb(184 255 240 / 0.3);
+  --warn: #ffb547;
   --shell-ink: #fff1ee;
   --accent: #e84a4a;
   color-scheme: dark;
@@ -167,9 +170,9 @@ body,
 .holo-card {
   position: relative;
   aspect-ratio: 3 / 4;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
-  background: rgb(255 255 255 / 0.04);
+  border-radius: 4px;
+  border: 1px solid var(--screen-line);
+  background: rgb(184 255 240 / 0.03);
   display: grid;
   place-items: center;
 }
@@ -225,11 +228,21 @@ body,
 }
 
 .type {
-  padding: 3px 12px;
-  border-radius: 99px;
-  border: 1px solid var(--type);
-  color: var(--type);
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 10px 2px 7px;
+  border: 1px solid var(--screen-line);
+  color: var(--screen-ink);
+  font-size: 13px;
+}
+
+/* The type's own color survives only as an identification chip. */
+.type::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  background: var(--type);
 }
 
 .metrics {
@@ -267,7 +280,7 @@ body,
 .stat-head {
   display: flex;
   justify-content: space-between;
-  font-family: 'Chakra Petch', sans-serif;
+  font-family: 'Share Tech Mono', ui-monospace, monospace;
   font-size: 12px;
   letter-spacing: 0.15em;
   color: var(--screen-dim);
@@ -291,6 +304,7 @@ body,
 }
 
 .radar-label b {
+  font-family: 'Share Tech Mono', ui-monospace, monospace;
   font-weight: 400;
   font-size: 15px;
   color: var(--screen-ink);
@@ -309,8 +323,8 @@ body,
   font: inherit;
   color: var(--screen-ink);
   background: rgb(0 0 0 / 0.25);
-  border: 1px solid rgb(201 255 241 / 0.3);
-  border-radius: 8px;
+  border: 1px solid var(--screen-line);
+  border-radius: 2px;
   padding: 8px 12px;
   outline: none;
 }
@@ -333,7 +347,7 @@ body,
   display: flex;
   gap: 14px;
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: 1px;
   cursor: pointer;
 }
 
@@ -343,8 +357,9 @@ body,
 
 .list li[aria-selected='true'] {
   position: relative;
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
-  color: #fff;
+  background: rgb(184 255 240 / 0.12);
+  box-shadow: inset 2px 0 0 var(--screen-ink);
+  color: var(--screen-ink);
 }
 
 /* Corner brackets that snap onto the selected row. */
@@ -371,6 +386,12 @@ body,
     inset: -9px -14px;
     opacity: 0;
   }
+}
+
+.list .no,
+.dex-no,
+.metrics dd {
+  font-family: 'Share Tech Mono', ui-monospace, monospace;
 }
 
 .list .no {
