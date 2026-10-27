@@ -58,12 +58,14 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VOut 
   // Hand over to the real <img> at the end.
   alpha *= 1.0 - smoothstep(END - 0.3, END, D.t);
   // Thin out mid-flight so overlapping additive particles don't blow out to white.
-  alpha *= 1.0 - mid * 0.45;
+  alpha *= 1.0 - mid * 0.7;
 
   // In flight, particles glow in the UI's cyan; at rest they keep the artwork colors.
   let base = mix(p.cFrom.rgb, p.cTo.rgb, e);
   let tint = mix(vec3f(0.45, 1.0, 0.92), D.accent.rgb, 0.25);
-  let color = mix(base, tint, mid * 0.85) * (1.0 + mid * 0.5);
+  // HDR target: overlapping additive particles already sum past 1 and bloom,
+  // so individual particles stay close to their base brightness.
+  let color = mix(base, tint, mid * 0.85) * (1.0 + mid * 0.25);
 
   let size = 1.1 + mid * 1.4;
   let css = D.rect.xy + uv * D.rect.zw + corner * size;

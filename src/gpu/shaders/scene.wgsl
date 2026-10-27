@@ -23,6 +23,9 @@ struct S {
 @group(0) @binding(1) var samp: sampler;
 @group(0) @binding(2) var flatTex: texture_2d<f32>;
 @group(0) @binding(3) var bgTex: texture_2d<f32>;
+@group(0) @binding(4) var bloomTex: texture_2d<f32>;
+
+const BLOOM_STRENGTH = 0.9;
 
 const DEVICE_RADIUS = 28.0;
 
@@ -87,6 +90,13 @@ fn sideWall(pm: vec2f, depth: f32) -> vec3f {
   albedo *= 1.0 - smoothstep(1.4, 0.4, seam) * 0.7;
   albedo *= select(1.0, 0.85, depth > thickness * 0.5);
   return albedo * diffuse + vec3f(spec + env * (1.0 - back));
+}
+
+// Leaves LDR content untouched below 0.8 and rolls HDR highlights off smoothly.
+fn shoulder(c: vec3f) -> vec3f {
+  let k = 0.8;
+  let over = max(c - k, vec3f(0.0));
+  return min(c, vec3f(k)) + (1.0 - k) * (1.0 - exp(-over / (1.0 - k)));
 }
 
 fn hash11(x: f32) -> f32 {
@@ -215,6 +225,9 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
   let pf = unproject(u.hFront, s);
   let front = textureSampleLevel(flatTex, samp, pf / u.res, 0.0);
   col = col * (1.0 - front.a) + front.rgb;
+  // Bloom lives in the same flat space, so it tilts with the device and spills past its edge.
+  col += textureSampleLevel(bloomTex, samp, pf / u.res, 0.0).rgb * BLOOM_STRENGTH;
+  col = shoulder(col);
 
   // Grain to kill banding
   col += (hash21(frag.xy + fract(u.time) * 100.0) - 0.5) / 255.0 * 2.0;

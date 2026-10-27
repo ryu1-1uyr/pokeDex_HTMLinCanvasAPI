@@ -1,5 +1,6 @@
 import { fx, MAX_REGIONS, noMorph, REGION_KIND } from '../fx/fxStore'
 import { ArtMorph } from './ArtMorph'
+import { Bloom } from './Bloom'
 import compositeWGSL from './shaders/composite.wgsl?raw'
 import materialWGSL from './shaders/material.wgsl?raw'
 import sceneWGSL from './shaders/scene.wgsl?raw'
@@ -8,7 +9,9 @@ const REGION_OFFSET = 36
 const UNIFORM_FLOATS = REGION_OFFSET + MAX_REGIONS * 8
 const SCENE_UNIFORM_FLOATS = 68
 const MATERIAL_SIZE = 1024
-const FLAT_FORMAT: GPUTextureFormat = 'rgba8unorm'
+/** HDR so emissive parts can exceed 1 and feed the bloom. */
+const FLAT_FORMAT: GPUTextureFormat = 'rgba16float'
+const BG_FORMAT: GPUTextureFormat = 'rgba8unorm'
 /** Background resolution relative to CSS px (it is blurred anyway). */
 const BG_SCALE = 0.5
 /** Frame cap; avoids saturating the GPU on 120Hz displays. */
@@ -110,6 +113,7 @@ export class Renderer {
   private disposed = false
   private hasDom = false
   private artMorph: ArtMorph
+  private bloom: Bloom
   private morphCard: () => HTMLElement | null = () => null
 
   private cssW = 1
@@ -169,7 +173,8 @@ export class Renderer {
     const sceneModule = device.createShaderModule({ label: 'scene', code: sceneWGSL })
     this.flatPipeline = pipeline('composite', device.createShaderModule({ label: 'composite', code: compositeWGSL }), FLAT_FORMAT)
     this.scenePipeline = pipeline('scene', sceneModule, this.format)
-    this.bgPipeline = pipeline('background', sceneModule, FLAT_FORMAT, 'fsBg')
+    this.bgPipeline = pipeline('background', sceneModule, BG_FORMAT, 'fsBg')
+    this.bloom = new Bloom(device)
 
     device.lost.then((info) => {
       if (info.reason === 'destroyed') return
@@ -212,6 +217,7 @@ export class Renderer {
     this.disposers.forEach((d) => d())
     if (!this.drawable) this.ui.style.transform = ''
     this.artMorph.destroy()
+    this.bloom.destroy()
     this.device.destroy()
   }
 
@@ -265,17 +271,18 @@ export class Renderer {
       this.canvas.width = w
       this.canvas.height = h
     }
-    const target = (label: string, tw: number, th: number) =>
+    const target = (label: string, tw: number, th: number, format: GPUTextureFormat) =>
       this.device.createTexture({
         label,
         size: [Math.max(1, tw), Math.max(1, th)],
-        format: FLAT_FORMAT,
+        format,
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
       })
     this.flatTex?.destroy()
-    this.flatTex = target('flat-device', w, h)
+    this.flatTex = target('flat-device', w, h, FLAT_FORMAT)
     this.bgTex?.destroy()
-    this.bgTex = target('background', Math.ceil(this.cssW * BG_SCALE), Math.ceil(this.cssH * BG_SCALE))
+    this.bgTex = target('background', Math.ceil(this.cssW * BG_SCALE), Math.ceil(this.cssH * BG_SCALE), BG_FORMAT)
+    this.bloom.resize(this.flatTex)
     this.bindGroups = {}
     if (this.drawable) {
       this.domTex.destroy()
@@ -397,6 +404,7 @@ export class Renderer {
       this.linear,
       this.flatTex.createView(),
       this.bgTex.createView(),
+      this.bloom.output.createView(),
     ])
 
     const encoder = this.device.createCommandEncoder()
@@ -409,6 +417,7 @@ export class Renderer {
     this.drawPass(encoder, this.flatTex.createView(), this.flatPipeline, bg.flat, (pass) => {
       if (sw > 0 && sh > 0) pass.setScissorRect(sx, sy, sw, sh)
     }, (pass) => this.drawMorph(pass))
+    this.bloom.encode(encoder)
     this.drawPass(encoder, this.bgTex.createView(), this.bgPipeline, bg.bg)
     this.drawPass(encoder, this.context.getCurrentTexture().createView(), this.scenePipeline, bg.scene)
     this.device.queue.submit([encoder.finish()])

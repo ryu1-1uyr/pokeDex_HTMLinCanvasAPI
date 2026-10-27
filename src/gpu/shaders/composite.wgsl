@@ -1,5 +1,8 @@
 // Flat device pass: procedural Pokédex shell + DOM texture + region materials.
-// Renders the untilted device into an offscreen texture (premultiplied alpha);
+// Renders the untilted device into an offscreen HDR texture (premultiplied alpha).
+// Lit surfaces are tonemapped to [0, 1]; emissive parts (radar lines, lens, LEDs)
+// are added afterwards and may exceed 1 so the bloom pass picks them up.
+//
 // scene.wgsl warps it into perspective over the background.
 // All positions are CSS pixels (fragment position / dpr), origin top-left.
 
@@ -397,15 +400,15 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     bg += vec3f(0.02, 0.05, 0.05) * dotMask;
     bg += u.accent.rgb * 0.06 * (1.0 - length(local) * 0.5);
 
-    // Region materials living under the DOM text.
+    col = aces(bg);
+
+    // Region materials living under the DOM text (emissive, so after tonemapping).
     for (var i = 0u; i < n; i++) {
       let kind = u.regions[i].params.x;
       if (kind == K_RADAR && regionSd(i, p) < 0.0) {
-        bg = radar(p + dp, u.regions[i].rect, bg);
+        col = radar(p + dp, u.regions[i].rect, col);
       }
     }
-
-    col = aces(bg);
     if (u.hasDom > 0.5) {
       // Lens-like chromatic aberration toward the screen edges.
       let ca = normalize(local + 1e-4) * 0.24;
@@ -552,11 +555,11 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let lit = lightAt(p, nrm, roughness);
     let dielectric = albedo * lit.diffuse + vec3f(lit.spec) * (1.0 - roughness) + lit.refl * lit.fresnel * (1.0 - roughness);
     let metallic = albedo * (lit.refl * 0.8 + vec3f(lit.spec)) ;
-    col = mix(dielectric, metallic, metal) + emissive;
+    col = mix(dielectric, metallic, metal);
     // Flake sparkle catching the pointer light
     col += vec3f(1.0, 0.9, 0.85) * mat.g * pow(lit.spec, 0.5) * 0.6;
     col += frontFill(p, baseN, micro, roughness, mat) * (1.0 - metal * 0.5);
-    col = aces(col);
+    col = aces(col) + emissive * 1.4;
 
     // DOM content drawn on the shell (labels, button captions)
     if (u.hasDom > 0.5) {
@@ -568,5 +571,5 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     alpha = 1.0 - smoothstep(-0.75, 0.75, devD);
   }
 
-  return vec4f(clamp(col, vec3f(0.0), vec3f(1.0)) * alpha, alpha);
+  return vec4f(max(col, vec3f(0.0)) * alpha, alpha);
 }
