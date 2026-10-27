@@ -17,6 +17,8 @@ experimental [HTML-in-Canvas API](https://github.com/WICG/html-in-canvas) and po
 - **FUI layers**: panel headings, micro text, live readouts, callout lines and a lock-on reticle,
   separated into depth layers that parallax with the tilt.
 - **Cries**: played through Web Audio; the lens glows with the cry's loudness envelope.
+- **HTML-in-Canvas only**: the DOM's own pixels feed the shaders, so screen text glows, leaves a CRT
+  phosphor afterglow, and reflects on the bezel and in the lens.
 
 ## Run
 
