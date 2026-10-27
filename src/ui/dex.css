@@ -699,6 +699,16 @@ body,
   .hud {
     display: none;
   }
+  /* Two even rows: ◀ ▶, then なきごえ / ランダム (DOM order fills the grid). */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .controls .shell-btn {
+    min-width: 0;
+    width: 100%;
+  }
   .credits {
     position: static;
     padding: 10px 14px 16px;
