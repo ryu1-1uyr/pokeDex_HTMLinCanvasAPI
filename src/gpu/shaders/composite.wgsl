@@ -226,6 +226,34 @@ fn frontFill(p: vec2f, baseN: vec3f, micro: vec3f, roughness: f32, mat: vec4f) -
   return vec3f(1.0, 0.97, 0.94) * (band + glints);
 }
 
+// Soft rectangle in reflection-direction space (center, half size, edge softness).
+fn softRect(q: vec2f, c: vec2f, half: vec2f, soft: f32) -> f32 {
+  let d = abs(q - c) - half;
+  return smoothstep(soft, -soft, max(d.x, d.y));
+}
+
+// The room in front of the device, as seen in the screen glass. Uses one perspective
+// view vector over the whole device, so each panel shows a different part of the same
+// reflection instead of repeating a per-panel pattern. Each pane is also tilted by a
+// tiny per-screen amount, like real glass that is never perfectly coplanar.
+fn glassReflection(p: vec2f, idx: u32) -> vec3f {
+  let dc = gDevice.xy + gDevice.zw * 0.5;
+  let viewP = normalize(vec3f((dc - p) / 1600.0, 1.0));
+  let r0 = u.regions[idx].rect;
+  let jitter = vec2f(fract(sin(r0.x * 12.9898 + r0.y * 78.233) * 43758.5453), fract(sin(r0.x * 39.346 + r0.y * 11.135) * 23421.631)) - 0.5;
+  let n = rotN(normalize(vec3f(jitter * 0.03, 1.0)));
+  let r = reflect(-viewP, n);
+  let q = r.xy / r.z;
+
+  // Window behind the viewer, upper left, with a mullion splitting it in two panes.
+  var env = softRect(q, vec2f(-0.2, -0.24), vec2f(0.16, 0.1), 0.03) * 0.2;
+  env *= 1.0 - softRect(q, vec2f(-0.2, -0.24), vec2f(0.006, 0.12), 0.004) * 0.8;
+  // Tall softbox on the right and a dim ceiling falloff.
+  env += softRect(q, vec2f(0.26, -0.05), vec2f(0.035, 0.3), 0.05) * 0.12;
+  env += smoothstep(0.1, -0.35, q.y) * 0.04;
+  return vec3f(0.92, 0.97, 1.0) * env;
+}
+
 // ---------------------------------------------------------------- radar chart
 
 fn statAt(i: i32) -> f32 {
@@ -407,11 +435,9 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
     let wallShade = vec3f(0.035, 0.035, 0.045) + vec3f(0.03) * smoothstep(0.0, 10.0, wallD);
     col = mix(col, wallShade, wall);
 
-    // Glass reflections: diagonal sheen + pointer glint.
-    let sheenOff = viewObj().xy * 4.0;
-    let sheen = smoothstep(0.25, 0.0, abs(local.x + sheenOff.x + (local.y + sheenOff.y) * 0.6 + 0.35)) * 0.08;
+    // Glass reflections: the room in front of the device + pointer glint.
     let glint = exp(-length(p - u.mouse) * 0.02) * 0.12;
-    col += vec3f(sheen + glint);
+    col += glassReflection(p, u32(screenIdx)) + vec3f(glint);
   } else if (devD > 1.0) {
     return vec4f(0.0);
   } else {
