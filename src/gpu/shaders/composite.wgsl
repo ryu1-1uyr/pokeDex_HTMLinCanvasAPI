@@ -45,6 +45,8 @@ const BEZEL = 12.0;
 /** FUI color roles (see docs/fui/grammar.md); mirror --fui-ink / --fui-warn. */
 const INK = vec3f(0.62, 1.0, 0.92);
 const WARN = vec3f(1.0, 0.62, 0.18);
+/** HTML-in-Canvas only: how far bright LCD text is pushed past 1.0 so it blooms. */
+const TEXT_GLOW = 0.5;
 /** Radius of the rounded outer rim of the shell. */
 const RIM = 18.0;
 /**
@@ -434,7 +436,15 @@ fn fs(@builtin(position) frag: vec4f) -> @location(0) vec4f {
       let dg = textureSampleLevel(domTex, samp, uvOf(p + barrel), 0.0);
       let db = textureSampleLevel(domTex, samp, uvOf(p + barrel - ca), 0.0);
       let dom = vec4f(dr.r, dg.g, db.b, dg.a);
-      col = mix(col, dom.rgb, dom.a);
+      // LCD text is emissive: bright glyphs go HDR and feed the bloom. The artwork card is
+      // excluded so the Pokémon image itself doesn't glow.
+      var inArt = false;
+      for (var i = 0u; i < n; i++) {
+        if (u.regions[i].params.x == K_HOLO && regionSd(i, p) < 0.0) { inArt = true; }
+      }
+      let lum = max(dom.r, max(dom.g, dom.b));
+      let glow = 1.0 + smoothstep(0.55, 0.95, lum) * TEXT_GLOW * select(1.0, 0.0, inArt);
+      col = mix(col, dom.rgb * glow, dom.a);
     }
 
     // Holographic foil over artwork cards
